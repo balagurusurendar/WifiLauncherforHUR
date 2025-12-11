@@ -15,13 +15,11 @@ import androidx.preference.PreferenceManager;
 
 import com.borconi.emil.wifilauncherforhur.R;
 import com.borconi.emil.wifilauncherforhur.services.WifiService;
-import com.borconi.emil.wifilauncherforhur.utils.BluetoothUtils;
 
 import java.util.Objects;
 import java.util.Set;
 
 import static android.content.Intent.ACTION_BOOT_COMPLETED;
-import static com.borconi.emil.wifilauncherforhur.tethering.MyTether.startTether;
 
 /**
  * BroadcastReceiver to catch when a Bluetooth Device is connected or disconnected

@@ -30,7 +30,6 @@ import androidx.annotation.NonNull;
 import androidx.preference.PreferenceManager;
 
 import com.borconi.emil.wifilauncherforhur.R;
-import com.borconi.emil.wifilauncherforhur.connectivity.ConnectivityHelper;
 import com.borconi.emil.wifilauncherforhur.connectivity.Connector;
 import com.borconi.emil.wifilauncherforhur.connectivity.WiFiP2PConnector;
 import com.borconi.emil.wifilauncherforhur.services.WifiService;

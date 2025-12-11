@@ -4,7 +4,6 @@ import static androidx.core.app.NotificationCompat.EXTRA_NOTIFICATION_ID;
 import static androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC;
 import static com.borconi.emil.wifilauncherforhur.WiFiLauncherServiceWidget.WIDGET_ACTION;
 import static com.borconi.emil.wifilauncherforhur.receivers.WifiReceiver.ACTION_WIFI_LAUNCHER_EXIT;
-import static com.borconi.emil.wifilauncherforhur.tethering.MyTether.startTether;
 
 import android.Manifest;
 import android.app.NotificationChannel;
@@ -21,52 +20,32 @@ import android.content.Intent;
 
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.net.DhcpInfo;
 import android.net.Network;
-
-import android.net.nsd.NsdManager;
-
-import android.net.wifi.WifiManager;
 
 import android.os.Build;
 ;
 import android.os.IBinder;
-import android.os.Parcel;
 import android.util.Log;
 import android.widget.RemoteViews;
-import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.car.app.connection.CarConnection;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
-import androidx.lifecycle.LifecycleOwner;
-import androidx.lifecycle.LifecycleService;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
 import androidx.preference.PreferenceManager;
 
 import com.borconi.emil.wifilauncherforhur.R;
 import com.borconi.emil.wifilauncherforhur.WiFiLauncherServiceWidget;
-import com.borconi.emil.wifilauncherforhur.connectivity.ConnectivityHelper;
 import com.borconi.emil.wifilauncherforhur.connectivity.Connector;
 import com.borconi.emil.wifilauncherforhur.connectivity.NDSConnector;
-import com.borconi.emil.wifilauncherforhur.connectivity.SocketListenner;
-import com.borconi.emil.wifilauncherforhur.connectivity.TetherConnector;
 import com.borconi.emil.wifilauncherforhur.connectivity.WiFiP2PConnector;
-import com.borconi.emil.wifilauncherforhur.receivers.WiFiDirectBroadcastReceiver;
 import com.borconi.emil.wifilauncherforhur.receivers.WifiReceiver;
 
 
 import java.lang.reflect.Method;
-import java.net.InetAddress;
 
-import java.net.InterfaceAddress;
-import java.net.NetworkInterface;
-import java.net.UnknownHostException;
-import java.nio.ByteOrder;
-import java.util.Enumeration;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -119,18 +98,10 @@ public class WifiService extends Service {
 
         SharedPreferences sharedPreferences=PreferenceManager.getDefaultSharedPreferences(this);
         int connectionmode=Integer.parseInt(sharedPreferences.getString("connection_mode","1"));
-        switch (connectionmode){
-            case 1:
-                connector=new NDSConnector(notificationManager,notification,this);
-                break;
-            case 2:
-                connector=new WiFiP2PConnector(notificationManager,notification,this);
-                break;
-            case 4:
-                connector=new TetherConnector(notificationManager,notification,this);
-                break;
-            case 5:
-                connector=new ConnectivityHelper(notificationManager,notification,this);
+        if (connectionmode == 2){
+            connector=new WiFiP2PConnector(notificationManager,notification,this);
+        }else {
+            connector = new NDSConnector(notificationManager, notification, this);
         }
 
         isRunning=true;
