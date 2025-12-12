@@ -84,7 +84,6 @@
             <intent-filter android:priority="999">
                 <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
                 <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
-                <action android:name="com.borconi.emil.wifilauncherforhur.action.EXIT" />
             </intent-filter>
         </receiver>
 

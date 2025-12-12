@@ -1,35 +1,30 @@
-package com.borconi.emil.wifilauncherforhur;
+package com.borconi.emil.wifilauncherforhur
 
-import android.content.Context;
-import android.util.AttributeSet;
+import android.content.Context
+import android.util.AttributeSet
+import androidx.preference.MultiSelectListPreference
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.preference.MultiSelectListPreference;
+class EmptyListPreference : MultiSelectListPreference {
+    constructor(
+        context: Context,
+        attrs: AttributeSet?,
+        defStyleAttr: Int,
+        defStyleRes: Int
+    ) : super(context, attrs, defStyleAttr, defStyleRes)
 
-public class EmptyListPreference extends MultiSelectListPreference {
-    public EmptyListPreference(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr, int defStyleRes) {
-        super(context, attrs, defStyleAttr, defStyleRes);
-    }
+    constructor(context: Context, attrs: AttributeSet?, defStyleAttr: Int) : super(
+        context,
+        attrs,
+        defStyleAttr
+    )
 
-    public EmptyListPreference(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
-        super(context, attrs, defStyleAttr);
-    }
+    constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
 
-    public EmptyListPreference(@NonNull Context context, @Nullable AttributeSet attrs) {
-        super(context, attrs);
-    }
+    constructor(context: Context) : super(context)
 
-    public EmptyListPreference(@NonNull Context context) {
-        super(context);
-    }
+    override fun onClick() {
+        if (entries == null) return
 
-    @Override
-    protected void onClick() {
-
-        if (getEntries() == null)
-            return;
-
-        super.onClick();
+        super.onClick()
     }
 }
