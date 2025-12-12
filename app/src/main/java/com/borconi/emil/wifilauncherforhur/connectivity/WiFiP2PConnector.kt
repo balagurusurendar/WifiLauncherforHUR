@@ -16,9 +16,9 @@ import com.borconi.emil.wifilauncherforhur.receivers.WiFiDirectBroadcastReceiver
 import com.borconi.emil.wifilauncherforhur.services.WifiService
 
 class WiFiP2PConnector(
-    notificationManager: NotificationManager?,
-    notification: NotificationCompat.Builder?,
-    context: Context?
+    notificationManager: NotificationManager,
+    notification: NotificationCompat.Builder,
+    context: Context
 ) : Connector(notificationManager, notification, context) {
     private var wifip2preceiver: WiFiDirectBroadcastReceiver? = null
     private var manager: WifiP2pManager? = null

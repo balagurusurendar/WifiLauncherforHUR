@@ -1,109 +1,108 @@
-package com.borconi.emil.wifilauncherforhur.connectivity;
+package com.borconi.emil.wifilauncherforhur.connectivity
 
-import static android.os.Looper.getMainLooper;
+import android.app.NotificationManager
+import android.content.Context
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdManager.DiscoveryListener
+import android.net.nsd.NsdServiceInfo
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import androidx.core.app.NotificationCompat
 
+class NDSConnector(
+    notificationManager: NotificationManager,
+    notification: NotificationCompat.Builder,
+    context: Context
+) : Connector(notificationManager, notification, context), DiscoveryListener, NsdManager.ResolveListener {
+    private val mNsdManager: NsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
 
-import android.app.NotificationManager;
-import android.content.Context;
-import android.net.nsd.NsdManager;
-import android.net.nsd.NsdServiceInfo;
-import android.os.Handler;
-import android.util.Log;
+    private var discoveryStarted = false
+    private var found = false
 
-import androidx.core.app.NotificationCompat;
-
-import com.borconi.emil.wifilauncherforhur.services.WifiService;
-
-public class NDSConnector extends Connector{
-    private static final String TAG = "NetworkServiceDiscovery";
-    public static final String SERVICE_TYPE = "_aawireless._tcp.";
-    private NsdManager.DiscoveryListener mDiscoveryListener;
-    private NsdManager mNsdManager;
-    private boolean found=false;
-
-    public NDSConnector(NotificationManager notificationManager, NotificationCompat.Builder notification, Context context) {
-        super(notificationManager, notification, context);
-        mNsdManager = (NsdManager) context.getSystemService(Context.NSD_SERVICE);
-        initializeDiscoveryListener();
-        mNsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, mDiscoveryListener);
+    init {
+        startDiscover()
     }
 
-    private void initializeDiscoveryListener() {
-        mDiscoveryListener = new NsdManager.DiscoveryListener() {
-
-            @Override
-            public void onDiscoveryStarted(String regType) {
-                Log.d(TAG, "Service discovery started");
-
-                final Handler handler = new Handler(getMainLooper());
-                handler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                            try {
-                                mNsdManager.stopServiceDiscovery(mDiscoveryListener);
-                            }
-                            catch (Exception e){}
-                    }
-                },10000);
-
-            }
-
-            @Override
-            public void onServiceFound(NsdServiceInfo service) {
-                Log.d(TAG, "Service found: " + service);
-                mNsdManager.resolveService(service, new NsdManager.ResolveListener() {
-                    @Override
-                    public void onServiceResolved(NsdServiceInfo serviceInfo) {
-
-
-                        Log.d(TAG, "Service resolved: " + serviceInfo);
-                        String hostIpAddress = serviceInfo.getHost().getHostAddress();
-                        Log.d(TAG, "Host IP address: " + hostIpAddress);
-                        if (!WifiService.connected.get())
-                            context.startActivity(getAAIntent(hostIpAddress, false));
-                        found=true;
-                        try {
-                            mNsdManager.stopServiceDiscovery(mDiscoveryListener);
-                        }
-                        catch (Exception e){}
-                    }
-
-                    @Override
-                    public void onResolveFailed(NsdServiceInfo serviceInfo, int errorCode) {
-                        Log.e(TAG, "Resolve failed: " + errorCode);
-                    }
-                });
-            }
-
-            @Override
-            public void onServiceLost(NsdServiceInfo service) {
-                Log.e(TAG, "Service lost: " + service);
-            }
-
-            @Override
-            public void onDiscoveryStopped(String serviceType) {
-                Log.i(TAG, "Discovery stopped: " + serviceType);
-                if (!found)
-                mNsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, mDiscoveryListener);
-            }
-
-            @Override
-            public void onStartDiscoveryFailed(String serviceType, int errorCode) {
-                Log.e(TAG, "Discovery failed: Error code: " + errorCode);
-
-            }
-
-            @Override
-            public void onStopDiscoveryFailed(String serviceType, int errorCode) {
-                Log.e(TAG, "Discovery failed: Error code: " + errorCode);
-
-            }
-        };
+    private fun startDiscover(){
+        if (discoveryStarted || found){
+            return
+        }
+        mNsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, this)
+        discoveryStarted = true;
     }
-    @Override
-    public void stop()
-    {
-        found=true;
-        mNsdManager.stopServiceDiscovery(mDiscoveryListener);
+
+    private fun stopDiscover(){
+        if (!discoveryStarted){
+            return
+        }
+        mNsdManager.stopServiceDiscovery(this)
+        discoveryStarted = false
+    }
+
+    override fun stop() {
+        found = true
+        stopDiscover()
+    }
+
+    override fun onDiscoveryStarted(serviceType: String?) {
+        Log.d(TAG, "Service discovery started")
+
+        val handler = Handler(Looper.getMainLooper())
+        handler.postDelayed(this::stopDiscover, 10000)
+    }
+
+    override fun onDiscoveryStopped(serviceType: String?) {
+        Log.d(TAG, "Discovery stopped: $serviceType")
+        if (!found){
+            startDiscover()
+        }
+    }
+
+    override fun onServiceFound(serviceInfo: NsdServiceInfo?) {
+        Log.d(TAG, "Service found: $serviceInfo")
+        if (!found){
+            mNsdManager.resolveService(serviceInfo, this);
+        }
+    }
+
+    override fun onServiceLost(serviceInfo: NsdServiceInfo?) {
+        Log.d(TAG, "Service Lost Starting Rediscover")
+        found = false
+        startDiscover()
+    }
+
+    override fun onStartDiscoveryFailed(serviceType: String?, errorCode: Int) {
+        Log.d(TAG, "Start Discovery Failed Restarting")
+        discoveryStarted = false
+        val handler = Handler(Looper.getMainLooper())
+        handler.postDelayed(this::startDiscover, 10000)
+    }
+
+    override fun onStopDiscoveryFailed(serviceType: String?, errorCode: Int) {
+        Log.d(TAG, "Stop Discovery Failed")
+    }
+
+    override fun onResolveFailed(
+        serviceInfo: NsdServiceInfo?,
+        errorCode: Int
+    ) {
+        Log.d(TAG, "Resolve Failed with error code $errorCode")
+    }
+
+    override fun onServiceResolved(serviceInfo: NsdServiceInfo?) {
+        Log.d(TAG, "Service resolved: $serviceInfo")
+        if (serviceInfo!=null){
+            val hostIpAddress = serviceInfo.hostAddresses[0].hostAddress
+            Log.d(TAG, "Host IP address: $hostIpAddress")
+            startAA(hostIpAddress)
+            found = true
+            stopDiscover()
+        }
+    }
+
+    companion object {
+        private const val TAG = "NetworkServiceDiscovery"
+        const val SERVICE_TYPE: String = "_aawireless._tcp."
     }
 }

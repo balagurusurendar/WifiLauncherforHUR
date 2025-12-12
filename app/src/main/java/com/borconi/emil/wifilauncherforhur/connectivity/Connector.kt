@@ -1,150 +1,93 @@
-package com.borconi.emil.wifilauncherforhur.connectivity;
+package com.borconi.emil.wifilauncherforhur.connectivity
 
-import static android.content.Context.CONNECTIVITY_SERVICE;
-import static com.borconi.emil.wifilauncherforhur.services.WifiService.NOTIFICATION_ID;
-import static org.mockito.Mockito.withSettings;
+import android.app.NotificationManager
+import android.content.Context
+import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiInfo
+import android.os.Parcel
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import com.borconi.emil.wifilauncherforhur.R
+import com.borconi.emil.wifilauncherforhur.services.WifiService
+import org.mockito.Mockito
 
-import android.app.NotificationManager;
-import android.content.Context;
-import android.content.Intent;
-import android.net.ConnectivityManager;
-import android.net.Network;
-import android.net.NetworkCapabilities;
-import android.net.NetworkRequest;
-import android.net.wifi.WifiInfo;
-import android.os.Parcel;
-import android.util.Log;
+open class Connector(
+    var notificationManager: NotificationManager,
+    var notification: NotificationCompat.Builder,
+    var context: Context
+) {
+    var network: Network? = null
 
-import androidx.annotation.NonNull;
-import androidx.core.app.NotificationCompat;
-
-import com.borconi.emil.wifilauncherforhur.R;
-import com.borconi.emil.wifilauncherforhur.services.WifiService;
-
-import org.mockito.Mockito;
-
-public class Connector {
-
-    NotificationManager notificationManager;
-    NotificationCompat.Builder notification;
-    Context context;
-
-    public Network network = null;
-
-    private static final String PACKAGE_NAME_ANDROID_AUTO_WIRELESS = "com.google.android.projection.gearhead";
-    private static final String CLASS_NAME_ANDROID_AUTO_WIRELESS = "com.google.android.apps.auto.wireless.setup.service.impl.WirelessStartupActivity";
-
-    private static final String PARAM_HOST_ADDRESS_EXTRA_NAME = "PARAM_HOST_ADDRESS";
-    private static final String PARAM_SERVICE_PORT_EXTRA_NAME = "PARAM_SERVICE_PORT";
-
-    public Connector(NotificationManager notificationManager, NotificationCompat.Builder notification, Context context) {
-        this.notificationManager = notificationManager;
-        this.notification = notification;
-        this.context = context;
-
-    }
-
-    public Intent getAAIntent(String ip, boolean checkWifi) {
-
-            if (network==null){
-                Network fakeNetwork = null;
-                try {
-                    fakeNetwork = Mockito.mock(Network.class, withSettings().useConstructor(9999));
-                } catch (Exception e) {
-                }
-
-                if (fakeNetwork != null) {
-                    Parcel p = Parcel.obtain();
-                    fakeNetwork.writeToParcel(p, 0);
-                    p.setDataPosition(0);
-                    network = Network.CREATOR.createFromParcel(p);
-                    Log.d("FakeNetwork", "Network is: " + network);
-                } else {
-                    ConnectivityManager connectivity = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-                    network = connectivity.getActiveNetwork();
-                }
-
-                if (!checkWifi){
-                    ConnectivityManager connectivity = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-                    network = connectivity.getActiveNetwork();
-                }
-            }
-
-            if (network == null) {
-                notification.setContentText(context.getString(R.string.no_network));
-                notificationManager.notify(NOTIFICATION_ID, notification.build());
-                return null;
-            }
-
-        Intent androidAutoWirelessIntent = new Intent();
-        WifiInfo wifiinfo = null;
-        try {
-            Class<?> cl = Class.forName("android.net.wifi.WifiInfo");
-            wifiinfo = (WifiInfo) cl.newInstance();
-        } catch (Exception e) {
-            e.printStackTrace();
+    fun getAAIntent(ip: String?): Intent? {
+        if (network == null) {
+            val connectivity =
+                context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            network = connectivity.activeNetwork
         }
 
-        androidAutoWirelessIntent.setClassName(PACKAGE_NAME_ANDROID_AUTO_WIRELESS, CLASS_NAME_ANDROID_AUTO_WIRELESS);
-        androidAutoWirelessIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (network == null) {
+            notification.setContentText(context.getString(R.string.no_network))
+            notificationManager.notify(WifiService.NOTIFICATION_ID, notification.build())
+            return null
+        }
+
+        val androidAutoWirelessIntent = Intent()
+        var wifiinfo: WifiInfo? = null
+        try {
+            val cl = Class.forName("android.net.wifi.WifiInfo")
+            wifiinfo = cl.newInstance() as WifiInfo
+        } catch (e: Exception) {
+            Log.d("Connector", "WifiInfo Creation error", e)
+        }
+
+        androidAutoWirelessIntent.setClassName(
+            PACKAGE_NAME_ANDROID_AUTO_WIRELESS,
+            CLASS_NAME_ANDROID_AUTO_WIRELESS
+        )
+        androidAutoWirelessIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         androidAutoWirelessIntent
-                .putExtra(PARAM_HOST_ADDRESS_EXTRA_NAME, ip)
-                .putExtra(PARAM_SERVICE_PORT_EXTRA_NAME, 5288)
-                .putExtra("wifi_info", wifiinfo)
-                .putExtra("PARAM_SERVICE_WIFI_NETWORK", network)
-                .putExtra("WIFI_Q_ENABLED", true);
+            .putExtra(PARAM_HOST_ADDRESS_EXTRA_NAME, ip)
+            .putExtra(PARAM_SERVICE_PORT_EXTRA_NAME, 5288)
+            .putExtra("wifi_info", wifiinfo)
+            .putExtra("PARAM_SERVICE_WIFI_NETWORK", network)
+            .putExtra("WIFI_Q_ENABLED", true)
 
-        return androidAutoWirelessIntent;
+        return androidAutoWirelessIntent
     }
 
-    public Boolean isWiFiConnected() {
-        ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+    val isWiFiConnected: Boolean
+        get() {
+            val connectivityManager =
+                context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-        Network nw = connectivityManager.getActiveNetwork();
-        if (nw == null) return false;
-        NetworkCapabilities actNw = connectivityManager.getNetworkCapabilities(nw);
-        return actNw != null && (actNw.hasTransport(NetworkCapabilities.TRANSPORT_WIFI));
+            val nw = connectivityManager.getActiveNetwork()
+            if (nw == null) return false
+            val actNw = connectivityManager.getNetworkCapabilities(nw)
+            return actNw != null && (actNw.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))
+        }
 
+    fun startAA(hostIpAddress: String?) {
+
+        if (!WifiService.connected.get()) context.startActivity(
+            getAAIntent(
+                hostIpAddress
+            )
+        )
     }
 
-    public void startAA(String hostIpAddress, boolean checkWifi){
-//        if (checkWifi && isWiFiConnected())
-//        {
-//            notification.setContentText(context.getString(R.string.still_connected_to_wifi));
-//            notificationManager.notify(NOTIFICATION_ID, notification.build());
-//            ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
-//                @Override
-//                public void onLost(@NonNull Network network) {
-//                    super.onLost(network);
-//                    try {
-//                        Thread.sleep(1000);
-//                    } catch (InterruptedException e) {
-//                        throw new RuntimeException(e);
-//                    }
-//                    if (!WifiService.connected.get())
-
-//                        context.startActivity(getAAIntent(hostIpAddress,checkWifi));
-//                    ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(CONNECTIVITY_SERVICE);
-//                    connectivityManager.unregisterNetworkCallback(this);
-//                }
-//
-//            };
-//            ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(CONNECTIVITY_SERVICE);
-//            NetworkRequest networkRequest = new NetworkRequest.Builder()
-//                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-//                    .build();
-//            connectivityManager.registerNetworkCallback(networkRequest, networkCallback);
-//        }
-//        else
-//        {
-//            if (!WifiService.connected.get())
-//                context.startActivity(getAAIntent(hostIpAddress,checkWifi));
-//        }
-
-        if (!WifiService.connected.get())
-            context.startActivity(getAAIntent(hostIpAddress,checkWifi));
+    open fun stop() {
     }
 
-    public void stop() {
+    companion object {
+        private const val PACKAGE_NAME_ANDROID_AUTO_WIRELESS =
+            "com.google.android.projection.gearhead"
+        private const val CLASS_NAME_ANDROID_AUTO_WIRELESS =
+            "com.google.android.apps.auto.wireless.setup.service.impl.WirelessStartupActivity"
+
+        private const val PARAM_HOST_ADDRESS_EXTRA_NAME = "PARAM_HOST_ADDRESS"
+        private const val PARAM_SERVICE_PORT_EXTRA_NAME = "PARAM_SERVICE_PORT"
     }
 }

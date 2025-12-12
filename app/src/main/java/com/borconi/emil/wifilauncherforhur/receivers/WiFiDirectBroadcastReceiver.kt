@@ -193,7 +193,7 @@ class WiFiDirectBroadcastReceiver(
                         connector.network = Network.CREATOR.createFromParcel(p)
                     }
                 }
-                connector.startAA(wifiP2pInfo.groupOwnerAddress.hostAddress, false)
+                connector.startAA(wifiP2pInfo.groupOwnerAddress.hostAddress)
             }
         }
     }
