@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.borconi.emil.wifilauncherforhur"
-        minSdk = 27
+        minSdk = 30
         targetSdk = 36
         versionCode = 390
         versionName = "3.9"

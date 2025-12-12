@@ -58,5 +58,6 @@
     <string name="use_wifip2p">Use WiFi Direct (also know as WiFi P2P)</string>
     <string name="client_mode">WiFi client mode (car headunit will create hotspot)</string>
     <string name="tether">Create WiFi hotspot (won\'t work on all devices!)</string>
+    <string name="wifi_not_enabled_waiting">Wi-Fi is not enabled. Waiting for Wifi to be enabled.</string>
 
 </resources>

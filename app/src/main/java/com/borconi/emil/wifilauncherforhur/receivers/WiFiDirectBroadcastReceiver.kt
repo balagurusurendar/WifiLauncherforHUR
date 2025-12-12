@@ -1,202 +1,204 @@
-package com.borconi.emil.wifilauncherforhur.receivers;
+package com.borconi.emil.wifilauncherforhur.receivers
 
-import static android.content.Context.CONNECTIVITY_SERVICE;
-import static android.net.wifi.p2p.WifiP2pManager.EXTRA_NETWORK_INFO;
-import static android.net.wifi.p2p.WifiP2pManager.EXTRA_WIFI_P2P_DEVICE;
-import static android.net.wifi.p2p.WifiP2pManager.EXTRA_WIFI_STATE;
-import static android.net.wifi.p2p.WifiP2pManager.WIFI_P2P_STATE_ENABLED;
-import static android.os.Looper.getMainLooper;
-
-import android.annotation.SuppressLint;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.net.ConnectivityManager;
-import android.net.Network;
-import android.net.NetworkCapabilities;
-import android.net.NetworkInfo;
-import android.net.NetworkRequest;
-import android.net.wifi.p2p.WifiP2pConfig;
-import android.net.wifi.p2p.WifiP2pDevice;
-import android.net.wifi.p2p.WifiP2pDeviceList;
-import android.net.wifi.p2p.WifiP2pGroup;
-import android.net.wifi.p2p.WifiP2pInfo;
-import android.net.wifi.p2p.WifiP2pManager;
-import android.os.Handler;
-import android.os.Parcelable;
-import android.util.Log;
-
-import androidx.annotation.NonNull;
-import androidx.preference.PreferenceManager;
-
-import com.borconi.emil.wifilauncherforhur.R;
-import com.borconi.emil.wifilauncherforhur.connectivity.Connector;
-import com.borconi.emil.wifilauncherforhur.connectivity.WiFiP2PConnector;
-import com.borconi.emil.wifilauncherforhur.services.WifiService;
-
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
+import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.ConnectivityManager.NetworkCallback
+import android.net.Network
+import android.net.wifi.p2p.WifiP2pConfig
+import android.net.wifi.p2p.WifiP2pDeviceList
+import android.net.wifi.p2p.WifiP2pGroup
+import android.net.wifi.p2p.WifiP2pInfo
+import android.net.wifi.p2p.WifiP2pManager
+import android.net.wifi.p2p.WifiP2pManager.PeerListListener
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.Parcel
+import android.util.Log
+import androidx.annotation.RequiresApi
+import androidx.preference.PreferenceManager
+import com.borconi.emil.wifilauncherforhur.connectivity.WiFiP2PConnector
+import org.mockito.Mockito
+import java.util.Locale
 
 @SuppressLint("MissingPermission")
-public class WiFiDirectBroadcastReceiver extends BroadcastReceiver implements WifiP2pManager.ActionListener, WifiP2pManager.PeerListListener, WifiP2pManager.ConnectionInfoListener {
+class WiFiDirectBroadcastReceiver(
+    private val manager: WifiP2pManager?,
+    private val channel: WifiP2pManager.Channel?,
+    mService: Context,
+    private val connector: WiFiP2PConnector
+) : BroadcastReceiver(), PeerListListener {
+    private val lookfor: String = PreferenceManager.getDefaultSharedPreferences(mService)
+        .getString("hur_p2p_name", "HUR7")!!.lowercase(Locale.getDefault())
+
+    private var discoveryStarted = false
+    private var hurfound = false
+
+    // Add these new variables
+    private val connectivityManager: ConnectivityManager
+    private var networkCallback: NetworkCallback? = null
+
+    init {
+
+        // Initialize ConnectivityManager
+        this.connectivityManager =
+            mService.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
 
-    private final String lookfor;
-
-    private WifiP2pManager manager;
-    private WifiP2pManager.Channel channel;
-    private Context mService;
-    private boolean looperStarted=false;
-    private boolean hurfound=false;
-    private Connector connector;
-    private WifiP2pManager.DnsSdServiceResponseListener servListener;
-    private Network network;
-
-    public WiFiDirectBroadcastReceiver(WifiP2pManager manager, WifiP2pManager.Channel channel, Context wifiService, WiFiP2PConnector wiFiP2PConnector) {
-        super();
-        this.manager = manager;
-        this.channel = channel;
-        this.mService=wifiService;
-        this.connector=wiFiP2PConnector;
-        lookfor=PreferenceManager.getDefaultSharedPreferences(mService).getString("hur_p2p_name","HUR7").toLowerCase();
-
-
-
-        Log.d("WiFi-P2P","Look for Device with following name:"+lookfor);
-
+        Log.d("WiFi-P2P", "Look for Device with following name:" + lookfor)
     }
 
-    @Override
-    public void onReceive(Context context, Intent intent) {
-        String action = intent.getAction();
+    override fun onReceive(context: Context?, intent: Intent) {
+        val action = intent.getAction()
 
 
 
-        Log.d("WifiP2P","Action is: "+action);
-        if (WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION.equals(action)) {
-            if (intent.getIntExtra(EXTRA_WIFI_STATE,WIFI_P2P_STATE_ENABLED)==WIFI_P2P_STATE_ENABLED)
-            {
-                Log.d("WifiP2P","Wifi p2p is enabled: "+intent);
-
-                if (looperStarted)
-                    return;
-              startDiscovery();
+        Log.d("WifiP2P", "Action is: " + action)
+        if (WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION == action) {
+            if (intent.getIntExtra(
+                    WifiP2pManager.EXTRA_WIFI_STATE,
+                    WifiP2pManager.WIFI_P2P_STATE_ENABLED
+                ) == WifiP2pManager.WIFI_P2P_STATE_ENABLED
+            ) {
+                Log.d("WifiP2P", "Wifi p2p is enabled: " + intent)
+                startDiscovery()
                 //Wifi P2P is enabled.
             }
             // Check to see if Wi-Fi is enabled and notify appropriate activity
-        } else if (WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION.equals(action)) {
-
+        } else if (WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION == action) {
             if (manager != null) {
-                if (hurfound)
-                    return;
-                manager.requestPeers(channel, this);
+                if (hurfound) return
+                manager.requestPeers(channel, this)
             }
             // Call WifiP2pManager.requestPeers() to get a list of current peers
-        } else if (WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION.equals(action)) {
-
-            manager.requestConnectionInfo(channel,this);
-            // Respond to new connection or disconnections
-        } else if (WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION.equals(action)) {
-            // Respond to this device's wifi state changing
-
-        }
-    }
-
-
-    private void startDiscovery() {
-        manager.discoverPeers(channel, new WifiP2pManager.ActionListener() {
-            @Override
-            public void onSuccess() {
-                Log.d("WifiP2P","P2P discovery started");
-                forcePeerDiscoverRestartr();
-            }
-
-            @Override
-            public void onFailure(int i) {
-                Log.e("WifiP2P","P2P FAILED to start");
-                final Handler handler = new Handler(getMainLooper());
-                handler.postDelayed(() -> startDiscovery(), 2000);
-            }
-        });
-
-    }
-    @Override
-    public void onSuccess() {
-
-    }
-
-    @Override
-    public void onFailure(int i) {
-
-    }
-
-    @Override
-    public void onPeersAvailable(WifiP2pDeviceList wifiP2pDeviceList) {
-
-        for (WifiP2pDevice device: wifiP2pDeviceList.getDeviceList()){
-
-            Log.d("WifiP2P","Found device: "+device.deviceName);
-            if (device.deviceName.toLowerCase().contains(lookfor))
-            {
-                hurfound=true;
-                Log.d("WifiP2P","Connecting to: "+device);
-                 WifiP2pConfig config = new WifiP2pConfig();
-                 config.deviceAddress = device.deviceAddress;
-                 config.groupOwnerIntent=0;
-                 manager.connect(channel, config,WiFiDirectBroadcastReceiver.this);
-
+        } else if (WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION == action) {
+            // This is the important part
+            val p2pInfo =
+                intent.getParcelableExtra<WifiP2pInfo?>(WifiP2pManager.EXTRA_WIFI_P2P_INFO)
+            if (p2pInfo !=null){
+                val groupInfo = intent.getParcelableExtra<WifiP2pGroup>(WifiP2pManager.EXTRA_WIFI_P2P_GROUP)
+                connectToAA(p2pInfo, groupInfo);
             }
         }
     }
 
-    public void onConnectionInfoAvailable(WifiP2pInfo wifiP2pInfo) {
-// String from WifiP2pInfo struct
-        Log.d("WiFiP2P","Connection info: "+wifiP2pInfo);
-        if (!wifiP2pInfo.groupFormed)
-            return;
-        String groupOwnerAddress = wifiP2pInfo.groupOwnerAddress.getHostAddress();
 
-        // After the group negotiation, we can determine the group owner
-        // (server).
-        if (wifiP2pInfo.groupFormed && wifiP2pInfo.isGroupOwner) {
+    private fun startDiscovery() {
+        if (discoveryStarted || hurfound) {
+            return
+        }
+        manager!!.discoverPeers(channel, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                discoveryStarted = true;
+                Log.d("WifiP2P", "P2P discovery started")
+                loopDiscovery()
+            }
 
-        } else if (wifiP2pInfo.groupFormed) {
-            connector.startAA(groupOwnerAddress,true);
+            override fun onFailure(i: Int) {
+                Log.e("WifiP2P", "P2P FAILED to start")
+                val handler = Handler(Looper.getMainLooper())
+                handler.postDelayed(Runnable { startDiscovery() }, 2000)
+            }
+        })
+    }
 
+    private fun stopDiscovery(restart: Boolean) {
+        if (!discoveryStarted){
+            return
+        }
+        manager!!.stopPeerDiscovery(channel, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                discoveryStarted = false
+                Log.d("WifiP2P", "Discovery stopped")
+                if (restart) {
+                    Log.d("WifiP2P", "Restarting discovery")
+                    startDiscovery()
+                }
+            }
 
+            override fun onFailure(i: Int) {
+                Log.e("WifiP2P", "Discovery NOT stopped!")
+            }
+        })
+    }
+
+    private fun loopDiscovery() {
+        if (discoveryStarted) {
+            val handler = Handler(Looper.getMainLooper())
+            handler.postDelayed(Runnable { stopDiscovery(!hurfound) }, 10000)
         }
     }
 
-    private void loopPeersDiscovery(){
+    override fun onPeersAvailable(wifiP2pDeviceList: WifiP2pDeviceList) {
+        for (device in wifiP2pDeviceList.getDeviceList()) {
+            Log.d("WifiP2P", "Found device: " + device.deviceName)
+            if (device.deviceName.lowercase(Locale.getDefault()).contains(lookfor)) {
+                hurfound = true
+                Log.d("WifiP2P", "Connecting to: " + device)
+                val config = WifiP2pConfig()
+                config.deviceAddress = device.deviceAddress
+                config.groupOwnerIntent = 0
+                manager!!.connect(channel, config, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() {
+                        Log.d("WifiP2P", "Connected to: " + device)
+                    }
 
-
-
-       manager.stopPeerDiscovery(channel, new WifiP2pManager.ActionListener() {
-           @Override
-           public void onSuccess() {
-               Log.d("WifiP2P","Discovery stopped");
-               manager.discoverPeers(channel, null);
-
-           }
-
-           @Override
-           public void onFailure(int i) {
-               Log.e("WifiP2P","Discovery NOT stopped!");
-           }
-       });
+                    override fun onFailure(reason: Int) {
+                        Log.d(
+                            "WifiP2P",
+                            "Failed to connect to: " + device + " with reason: " + reason
+                        )
+                        hurfound = false
+                        startDiscovery()
+                    }
+                })
+                break
+            }
+        }
     }
 
-    private final void forcePeerDiscoverRestartr() {
+    fun connectToAA(wifiP2pInfo: WifiP2pInfo, groupInfo : WifiP2pGroup?) {
+        if (wifiP2pInfo.groupFormed){
+            if (wifiP2pInfo.isGroupOwner) {
+                Log.d("WifiP2P", "me assigned as group owner so removing group & restart")
+                manager!!.removeGroup(channel, object : WifiP2pManager.ActionListener {
+                    override fun onFailure(reason: Int) {
+                        Log.d("WifiP2P", "Failed to remove group:")
+                    }
 
-        looperStarted=true;
-        if (hurfound)
-        {
-            manager.stopPeerDiscovery(channel,null);
-            return;
+                    override fun onSuccess() {
+                        Log.d("WifiP2P", "Group removed. starting discovery again")
+                        hurfound = false
+                        startDiscovery()
+                    }
+                })
+            } else {
+                if (groupInfo!=null){
+                    var fakeNetwork: Network? = null
+                    try {
+                        fakeNetwork = Mockito.mock(
+                            Network::class.java,
+                            Mockito.withSettings().useConstructor(groupInfo.networkId)
+                        )
+                    } catch (e: Exception) {
+                    }
+
+                    if (fakeNetwork != null) {
+                        val p = Parcel.obtain()
+                        fakeNetwork.writeToParcel(p, 0)
+                        p.setDataPosition(0)
+                        connector.network = Network.CREATOR.createFromParcel(p)
+                    }
+                }
+                connector.startAA(wifiP2pInfo.groupOwnerAddress.hostAddress, false)
+            }
         }
-        final Handler handler = new Handler(getMainLooper());
-        loopPeersDiscovery();
-            handler.postDelayed(() -> forcePeerDiscoverRestartr(), 10000);
+    }
+
+    fun stop(){
+        stopDiscovery(false)
     }
 }
