@@ -73,7 +73,7 @@ class WiFiP2PConnector(
             // If Wi-Fi is off, register a receiver to wait for it to be turned on
             Log.d(TAG, "Wi-Fi is disabled. Registering receiver to listen for state changes.")
             val filter = IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION)
-            context?.registerReceiver(wifiStateReceiver, filter)
+            context.registerReceiver(wifiStateReceiver, filter)
             notification.setContentText(context.getString(R.string.wifi_not_enabled_waiting))
             notificationManager.notify(WifiService.NOTIFICATION_ID, notification.build())
         }
@@ -118,14 +118,14 @@ class WiFiP2PConnector(
                 wifip2preceiver!!.stop()
                 try {
                     // Unregister all receivers to prevent leaks
-                    context?.unregisterReceiver(wifip2preceiver)
+                    context.unregisterReceiver(wifip2preceiver)
                 }catch (e: IllegalArgumentException){}
                 wifip2preceiver = null
             }
             // It's good practice to try/catch unregistering the wifiStateReceiver,
             // as it might not have been registered if Wi-Fi was already on.
             try {
-                context?.unregisterReceiver(wifiStateReceiver)
+                context.unregisterReceiver(wifiStateReceiver)
             } catch (e: IllegalArgumentException) {
                 // Receiver was not registered, which is fine.
             }

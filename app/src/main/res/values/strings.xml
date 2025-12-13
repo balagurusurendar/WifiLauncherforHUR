@@ -59,5 +59,10 @@
     <string name="client_mode">WiFi client mode (car headunit will create hotspot)</string>
     <string name="tether">Create WiFi hotspot (won\'t work on all devices!)</string>
     <string name="wifi_not_enabled_waiting">Wi-Fi is not enabled. Waiting for Wifi to be enabled.</string>
+    <string name="select_wifi_frequency">Select WiFi Frequency</string>
+    <string name="wifi_frequency_desc">Selecting Frequency will scan and use least populated channel</string>
+    <string name="wifi_2ghz">2 Ghz</string>
+    <string name="wifi_5ghz">5 Ghz</string>
+    <string name="wifi_auto">Auto</string>
 
 </resources>

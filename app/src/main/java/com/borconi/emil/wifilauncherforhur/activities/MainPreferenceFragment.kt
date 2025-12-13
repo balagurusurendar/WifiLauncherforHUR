@@ -48,11 +48,16 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
         val preferenceScreen = getPreferenceScreen()
         val option = newValue.toString().toInt()
         val wifivalue = preferenceScreen.findPreference<EditTextPreference?>("hur_p2p_name")
+        val wififrequencyOption = preferenceScreen.findPreference<ListPreference?>("wifi_frequency")
         if (option == 2) {
             wifivalue!!.isVisible = true
+            wififrequencyOption!!.isVisible = true
             wifivalue.setSummary(R.string.hur_p2p_name_desc)
             wifivalue.setTitle(R.string.hur_p2p_name)
-        } else wifivalue!!.isVisible = false
+        } else {
+            wifivalue!!.isVisible = false
+            wififrequencyOption!!.isVisible = false
+        }
 
         if (isRunning) {
             activity!!.stopService(Intent(context, WifiService::class.java))

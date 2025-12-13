@@ -76,6 +76,18 @@
             android:summary="@string/hur_p2p_name_desc"
             />
 
+        <ListPreference
+            app:iconSpaceReserved="true"
+            android:enabled="true"
+            android:defaultValue="0"
+            android:key="wifi_frequency"
+            android:persistent="true"
+            android:entries="@array/wifi_frequency_value"
+            android:entryValues="@array/wifi_frequency_description"
+            android:summary="@string/wifi_frequency_desc"
+            android:title="@string/select_wifi_frequency"
+            />
+
 
         <SwitchPreference
             app:iconSpaceReserved="true"
