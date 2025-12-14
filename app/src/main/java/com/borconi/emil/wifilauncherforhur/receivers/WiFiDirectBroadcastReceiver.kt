@@ -21,6 +21,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Parcel
 import android.util.Log
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.preference.Preference
 import androidx.preference.PreferenceManager
@@ -32,7 +33,7 @@ import java.util.Locale
 class WiFiDirectBroadcastReceiver(
     private val manager: WifiP2pManager?,
     private val channel: WifiP2pManager.Channel?,
-    mService: Context,
+    private val mService: Context,
     private val connector: WiFiP2PConnector
 ) : BroadcastReceiver(), PeerListListener {
     private val lookfor: String = PreferenceManager.getDefaultSharedPreferences(mService)
@@ -141,23 +142,26 @@ class WiFiDirectBroadcastReceiver(
     }
 
     private fun get2GhzFrequency(): Int {
-        // Define the non-overlapping 2.4 GHz channels (1, 6, 11) and their frequencies in MHz
+        // Define all standard 2.4 GHz channels and their center frequencies in MHz.
         val channelFrequencies = mapOf(
-            1 to 2412, 6 to 2437, 11 to 2462
+            1 to 2412, 2 to 2417, 3 to 2422, 4 to 2427, 5 to 2432, 6 to 2437,
+            7 to 2442, 8 to 2447, 9 to 2452, 10 to 2457, 11 to 2462, 12 to 2467, 13 to 2472
         )
-        // Initialize a mutable map to count networks on each non-overlapping channel
-        val channelCounts = channelFrequencies.keys.associateWith { 0 }.toMutableMap()
+        // Initialize a map to hold the network count for each channel.
+        val channelCounts = (1..13).associateWith { 0 }.toMutableMap()
 
         try {
-            // Getting scan results requires location permissions and enabled location services
+            // Getting scan results requires location permissions and enabled location services.
             val scanResults = wifiManager.scanResults
             for (result in scanResults) {
                 val channel = frequencyToChannel(result.frequency)
-                // To account for overlap, we assign a network to the nearest non-overlapping channel.
-                when (channel) {
-                    in 1..3 -> channelCounts[1] = channelCounts[1]!! + 1 // Channels 1-3 are closest to 1
-                    in 4..8 -> channelCounts[6] = channelCounts[6]!! + 1 // Channels 4-8 are closest to 6
-                    in 9..13 -> channelCounts[11] = channelCounts[11]!! + 1 // Channels 9-13 are closest to 11
+                // To account for channel overlap, a detected network adds to the count
+                // of its main channel and its immediate neighbors.
+                val influence = 2 // A network on channel 6 also affects 4, 5, 7, 8
+                for (i in (channel - influence)..(channel + influence)) {
+                    if (channelCounts.containsKey(i)) {
+                        channelCounts[i] = channelCounts[i]!! + 1
+                    }
                 }
             }
         } catch (e: SecurityException) {
@@ -166,18 +170,26 @@ class WiFiDirectBroadcastReceiver(
             return 2437
         }
 
-        // Find the channel with the fewest networks, defaulting to channel 6 if the map is empty.
-        val leastPopulatedChannel = channelCounts.minByOrNull { it.value }?.key ?: 6
+        // Find the minimum network count.
+        val minCount = channelCounts.minByOrNull { it.value }?.value ?: 0
 
-        // Return the frequency in MHz for the least populated channel, defaulting to channel 6's frequency.
-        return channelFrequencies[leastPopulatedChannel] ?: 2437
+        // Get all channels that have this minimum count.
+        val leastPopulatedChannels = channelCounts.filter { it.value == minCount }.keys
+
+        // Randomly pick one of the least populated channels, or default to 6 if the list is empty.
+        val chosenChannel = leastPopulatedChannels.randomOrNull() ?: 6
+
+        // Return the frequency in MHz for the chosen channel.
+        return channelFrequencies[chosenChannel] ?: 2437
     }
 
+
+
+
     private fun get5GhzFrequency(): Int {
-        // A selection of non-overlapping 20MHz channels in the 5GHz band.
+        // A selection of non-overlapping 40MHz channels in the 5GHz band.
         val channelFrequencies = mapOf(
-            36 to 5180, 40 to 5200, 44 to 5220, 48 to 5240,
-            149 to 5745, 153 to 5765, 157 to 5785, 161 to 5805
+            38 to 5190, 46 to 5230, 151 to 5755, 159 to 5795
         )
         val channelCounts = channelFrequencies.keys.associateWith { 0 }.toMutableMap()
 
@@ -185,20 +197,29 @@ class WiFiDirectBroadcastReceiver(
             val scanResults = wifiManager.scanResults
             for (result in scanResults) {
                 val channel = frequencyToChannel(result.frequency)
-                if (channelCounts.containsKey(channel)) {
-                    channelCounts[channel] = channelCounts[channel]!! + 1
+                // A 40MHz channel is affected by networks on the two 20MHz channels it spans
+                for ((centerChannel, _) in channelFrequencies) {
+                    if (channel >= centerChannel - 2 && channel <= centerChannel + 2) {
+                        channelCounts[centerChannel] = channelCounts[centerChannel]!! + 1
+                    }
                 }
             }
         } catch (e: SecurityException) {
             Log.e("WifiP2P", "Permission denied for getting 5GHz scan results", e)
-            return 5180 // Default to channel 36
+            return 5190 // Default to channel 38
         }
 
-        // Find the channel with the minimum number of networks, defaulting to channel 36
-        val leastPopulatedChannel = channelCounts.minByOrNull { it.value }?.key ?: 36
+        // Find the minimum network count.
+        val minCount = channelCounts.minByOrNull { it.value }?.value ?: 0
+
+        // Get all channels that have this minimum count.
+        val leastPopulatedChannels = channelCounts.filter { it.value == minCount }.keys
+
+        // Randomly pick one of the least populated channels, or default to 6 if the list is empty.
+        val chosenChannel = leastPopulatedChannels.randomOrNull() ?: 38
 
         // Return the frequency in MHz for the least populated channel
-        return channelFrequencies[leastPopulatedChannel] ?: 5180
+        return channelFrequencies[chosenChannel] ?: 5190
     }
 
 
@@ -220,17 +241,21 @@ class WiFiDirectBroadcastReceiver(
             if (device.deviceName.lowercase(Locale.getDefault()).contains(lookfor)) {
                 hurfound = true
                 Log.d("WifiP2P", "Connecting to: " + device)
-                val frequencySelected : Int = if (customFrequencyFailed){
-                    0
-                }else{
-                    preference.getInt("wifi_frequency", 0)
-                }
+                val frequencySelected : Int = if (customFrequencyFailed) 0 else preference.getString("wifi_frequency", "0")?.toInt() ?: 0
                 val configBuilder = WifiP2pConfig.Builder()
                 configBuilder.setDeviceAddress(MacAddress.fromString(device.deviceAddress))
                 Log.d("WifiP2P", "Selected frequency: $frequencySelected")
                 when(frequencySelected){
-                    2 -> configBuilder.setGroupOperatingFrequency(get2GhzFrequency())
-                    5 -> configBuilder.setGroupOperatingFrequency(get5GhzFrequency())
+                    2 -> {
+                        val frequency = get2GhzFrequency()
+                        configBuilder.setGroupOperatingFrequency(frequency)
+                        Toast.makeText(mService, "Connecting on 2.4 GHz with frequency $frequency", Toast.LENGTH_LONG).show()
+                    }
+                    5 -> {
+                        val frequency = get5GhzFrequency()
+                        configBuilder.setGroupOperatingFrequency(frequency)
+                        Toast.makeText(mService, "Connecting on 5 GHz with frequency $frequency", Toast.LENGTH_LONG).show()
+                    }
                 }
                 val config = configBuilder.build()
                 config.groupOwnerIntent = 0
@@ -245,7 +270,10 @@ class WiFiDirectBroadcastReceiver(
                             "Failed to connect to: " + device + " with reason: " + reason
                         )
                         hurfound = false
-                        customFrequencyFailed = frequencySelected != 0
+                        if (frequencySelected!=0){
+                            Toast.makeText(mService, "Selected Custom Frequency failed so moving to auto", Toast.LENGTH_LONG).show()
+                            customFrequencyFailed = true
+                        }
                         startDiscovery()
                     }
                 })
