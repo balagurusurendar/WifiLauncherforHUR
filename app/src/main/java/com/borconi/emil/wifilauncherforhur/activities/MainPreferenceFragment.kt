@@ -37,6 +37,8 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
     private var alertDialogOpen = false
     private var bluetoothDevicesPreference: Preference? = null
 
+    var fromBluetoothReceiver = false
+
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences, rootKey)
@@ -60,11 +62,11 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
         }
 
         if (isRunning) {
-            activity!!.stopService(Intent(context, WifiService::class.java))
+            requireActivity().stopService(Intent(context, WifiService::class.java))
             Thread {
                 try {
                     Thread.sleep(500)
-                    activity!!.startService(Intent(context, WifiService::class.java))
+                    requireActivity().startService(Intent(context, WifiService::class.java))
                 } catch (e: InterruptedException) {
                     throw RuntimeException(e)
                 }
@@ -94,14 +96,14 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
         bluetoothDevicesPreference!!.onPreferenceClickListener =
             Preference.OnPreferenceClickListener { preference: Preference? ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) if (ActivityCompat.checkSelfPermission(
-                        context!!,
+                        requireContext(),
                         Manifest.permission.BLUETOOTH_CONNECT
                     ) != PackageManager.PERMISSION_GRANTED
                 ) {
                     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                     intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    val uri = Uri.fromParts("package", context!!.getPackageName(), null)
-                    intent.setData(uri)
+                    val uri = Uri.fromParts("package", requireContext().packageName, null)
+                    intent.data = uri
                     startActivity(intent)
                     return@OnPreferenceClickListener false
                 } else tryPopulateBluetoothDevices(preference as EmptyListPreference)
@@ -122,7 +124,7 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
             preferenceScreen.findPreference<Preference?>("start_service_manually")
         startServiceManuallyPreference?.onPreferenceClickListener =
             Preference.OnPreferenceClickListener { _: Preference? ->
-                val context = getContext()
+                val context = context
                 val wifiServiceIntent = Intent(context, WifiService::class.java)
 
                 context?.startForegroundService(wifiServiceIntent)
@@ -130,18 +132,18 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
             }
 
 
-        if (!alertDialogOpen && !PreferenceManager.getDefaultSharedPreferences(context!!)
+        if (!alertDialogOpen && !PreferenceManager.getDefaultSharedPreferences(requireContext())
                 .getBoolean("nowarning", false)
         ) {
             val builder =
-                AlertDialog.Builder(getActivity()!!, R.style.Base_Theme_MaterialComponents_Dialog)
+                AlertDialog.Builder(requireActivity(), R.style.Base_Theme_MaterialComponents_Dialog)
 
-            builder.setTitle(getActivity()!!.getResources().getString(R.string.major_title))
-            builder.setMessage(getActivity()!!.getResources().getString(R.string.major_desc))
+            builder.setTitle(requireActivity().resources.getString(R.string.major_title))
+            builder.setMessage(requireActivity().resources.getString(R.string.major_desc))
             builder.setPositiveButton(
                 getString(R.string.save)
             ) { dialog: DialogInterface?, id: Int ->
-                PreferenceManager.getDefaultSharedPreferences(context!!).edit()
+                PreferenceManager.getDefaultSharedPreferences(requireContext()).edit()
                     .putBoolean("nowarning", true).apply()
                 dialog!!.dismiss()
             }
@@ -171,60 +173,59 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
     }
 
 
-    fun requestDrawOverlays(msg: Int) {
-        if (!alertDialogOpen) {
-            val builder =
-                AlertDialog.Builder(activity!!, R.style.Base_Theme_MaterialComponents_Dialog)
+    fun requestSpecialPermission(msg: Int) {
+        if (alertDialogOpen) return
 
-            builder.setTitle(
-                getActivity()!!.getResources().getString(R.string.alert_permission_denied_title)
-            )
-            builder.setMessage(activity!!.resources.getString(msg))
-            builder.setPositiveButton(
-                "OK"
-            ) { dialog: DialogInterface?, id: Int ->
-                val intent: Intent?
-                if (msg == R.string.alert_need_draw_over_other_apps) {
-                    intent =
-                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).setData(Uri.parse("package:" + activity!!.packageName))
-                    startActivity(intent)
-                } else if (msg == R.string.System_settings_desc) {
-                    intent =
-                        Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).setData(Uri.parse("package:" + activity!!.packageName))
-                    startActivity(intent)
-                } else if (msg == R.string.battery_optimization_title) {
-                    intent =
-                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).setData(
-                            Uri.parse("package:" + activity!!.packageName)
-                        )
-                    builder.setTitle(getString(R.string.battery_optimization_title))
-                    startActivity(intent)
-                } else if (msg == R.string.locations_needed) requestPermissionLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                    )
-                )
-                else requestPermissionLauncher.launch(arrayOf<String>(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
-                dialog!!.dismiss()
-            }
-            builder.setOnDismissListener { dialog: DialogInterface? ->
-                alertDialogOpen = false
-            }
-            alertDialogOpen = true
-            builder.show()
+        val builder = AlertDialog.Builder(requireActivity(), R.style.Base_Theme_MaterialComponents_Dialog)
+
+        val title = when (msg) {
+            R.string.disable_optimization -> R.string.battery_optimization_title
+            else -> R.string.alert_permission_denied_title
         }
+        builder.setTitle(title)
+        builder.setMessage(msg)
+        builder.setPositiveButton("OK") { dialog, _ ->
+            val intent = when (msg) {
+                R.string.alert_need_draw_over_other_apps ->
+                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${requireActivity().packageName}"))
+                R.string.System_settings_desc ->
+                    Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${requireActivity().packageName}"))
+                R.string.disable_optimization ->
+                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${requireActivity().packageName}"))
+                else -> null
+            }
+
+            if (intent != null) {
+                startActivity(intent)
+            } else {
+                when(msg) {
+                    R.string.locations_needed ->
+                        requestPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                    R.string.background_location_needed ->
+                        requestPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
+                }
+            }
+
+            dialog.dismiss()
+        }
+        builder.setOnDismissListener {
+            alertDialogOpen = false
+        }
+        alertDialogOpen = true
+        builder.show()
     }
 
 
     override fun onResume() {
         super.onResume()
-        val preferenceScreen = getPreferenceScreen()
+        val preferenceScreen = preferenceScreen
 
         val bluetoothDevices =
             preferenceScreen.findPreference<MultiSelectListPreference?>("selected_bluetooth_devices")
 
-        tryPopulateBluetoothDevices((bluetoothDevicesPreference as EmptyListPreference?)!!)
+        (bluetoothDevicesPreference as? EmptyListPreference)?.let {
+            tryPopulateBluetoothDevices(it)
+        }
         setBluetoothDevicesSummary(bluetoothDevices)
         updatePermissionsStatusPreference()
     }
@@ -249,14 +250,24 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
                 getPermission(true)
             }
         }
+        if (fromBluetoothReceiver){
+            if (getPermission(false)){
+                fromBluetoothReceiver = false
+                val wifiServiceIntent = Intent(context, WifiService::class.java)
+
+                requireContext().startForegroundService(wifiServiceIntent)
+            }
+        }else{
+            getPermission(true)
+        }
     }
 
 
-    private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions(), { permission: Map<String, Boolean> ->
+    private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permission: Map<String, Boolean> ->
         permission.entries.forEach { entry ->
             run {
                 if (!entry.value) {
-                    if (!ActivityCompat.shouldShowRequestPermissionRationale(activity as Activity, entry.key)) {
+                    if (!ActivityCompat.shouldShowRequestPermissionRationale(requireActivity(), entry.key)) {
                         startActivity(
                             Intent(
                                 Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -267,72 +278,60 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
                         if (entry.key === Manifest.permission.BLUETOOTH_CONNECT)
                             setBluetoothDevicesSummary(null)
                     }
-                } else {
-                    tryPopulateBluetoothDevices(bluetoothDevicesPreference as EmptyListPreference)
                 }
             }
         }
-    })
+    }
 
     private fun getPermission(show: Boolean): Boolean {
-        val packageName = context!!.packageName
-        val pm = context!!.getSystemService(Context.POWER_SERVICE) as PowerManager
-        if (Settings.canDrawOverlays(context) && Settings.System.canWrite(context)
-            && pm.isIgnoringBatteryOptimizations(packageName) //&& ContextCompat.checkSelfPermission(getActivity(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-            && ((Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(
-                activity!!,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED && (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && ContextCompat.checkSelfPermission(
-                activity!!,
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED)
-                    ) || ContextCompat.checkSelfPermission(
-                activity!!,
-                Manifest.permission.NEARBY_WIFI_DEVICES
-            ) == PackageManager.PERMISSION_GRANTED)
-        ) return true
-        else if (!show) return false
-        else if ((Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(
-                activity!!,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED)
-        ) {
-            if (shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
-                requestDrawOverlays(R.string.locations_needed)
-            } else requestPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
-            return false
-        } else if ((Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && ContextCompat.checkSelfPermission(
-                activity!!,
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED)
-        ) {
-            if (shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_BACKGROUND_LOCATION)) {
-                requestDrawOverlays(R.string.background_location_needed)
-            } else requestPermissionLauncher.launch(arrayOf<String>(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
-            return false
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(
-                activity!!,
-                Manifest.permission.NEARBY_WIFI_DEVICES
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissionLauncher.launch(arrayOf<String>(Manifest.permission.NEARBY_WIFI_DEVICES))
-            return false
-        } else if (!Settings.canDrawOverlays(context)) {
-            requestDrawOverlays(R.string.alert_need_draw_over_other_apps)
-            return false
-        } else if (!Settings.System.canWrite(context)) {
-            requestDrawOverlays(R.string.System_settings_desc)
-            return false
-        } else {
-            requestDrawOverlays(R.string.disable_optimization)
+        val packageName = requireContext().packageName
+        val pm = requireContext().getSystemService(Context.POWER_SERVICE) as PowerManager
 
+        // 1. Check special "draw over other apps" permission
+        if (!Settings.canDrawOverlays(context)) {
+            if (show) requestSpecialPermission(R.string.alert_need_draw_over_other_apps)
             return false
         }
+        // 2. Check special "write settings" permission
+        if (!Settings.System.canWrite(context)) {
+            if (show) requestSpecialPermission(R.string.System_settings_desc)
+            return false
+        }
+        // 3. Check battery optimization
+        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+            if (show) requestSpecialPermission(R.string.disable_optimization)
+            return false
+        }
+
+        // 4. Check runtime permissions for Wi-Fi
+        if (ContextCompat.checkSelfPermission(requireActivity(), Manifest.permission.NEARBY_WIFI_DEVICES) != PackageManager.PERMISSION_GRANTED) {
+            if (show) requestPermissionLauncher.launch(arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES))
+            return false
+        }
+        if (ContextCompat.checkSelfPermission(requireActivity(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            if (show) {
+                if (shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                    requestSpecialPermission(R.string.locations_needed)
+                } else {
+                    requestPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                }
+            }
+            return false
+        }
+        // Background location is also required on API 30 for scans to work when app is not in foreground.
+        if (ContextCompat.checkSelfPermission(requireActivity(), Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            if (show) {
+                if (shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_BACKGROUND_LOCATION)) {
+                    requestSpecialPermission(R.string.background_location_needed)
+                } else {
+                    requestPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
+                }
+            }
+            return false
+        }
+
+        // All permissions are granted
+        return true
     }
 
 
@@ -340,32 +339,32 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
         val adapter = BluetoothAdapter.getDefaultAdapter()
         if (adapter != null && !adapter.isEnabled) {
             val intentOpenBluetoothSettings = Intent()
-            intentOpenBluetoothSettings.setAction(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            intentOpenBluetoothSettings.action = BluetoothAdapter.ACTION_REQUEST_ENABLE
             startActivityForResult(intentOpenBluetoothSettings, REQUEST_ENABLE_BT)
             return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) if (ActivityCompat.checkSelfPermission(
-                context!!,
+                requireContext(),
                 Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             //  startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + BuildConfig.APPLICATION_ID)));
             return
         }
-        if (adapter!!.getBondedDevices().isEmpty()) {
+        if (adapter!!.bondedDevices.isEmpty()) {
             val entries = arrayOfNulls<String>(1)
             val entryValues = arrayOfNulls<String>(1)
             entries[0] = "NO DEVICES"
             entryValues[0] = null
         }
-        val entries = arrayOfNulls<String>(adapter.getBondedDevices().size)
-        val entryValues = arrayOfNulls<String>(adapter.getBondedDevices().size)
+        val entries = arrayOfNulls<String>(adapter.bondedDevices.size)
+        val entryValues = arrayOfNulls<String>(adapter.bondedDevices.size)
         var i = 0
-        for (dev in adapter.getBondedDevices()) {
-            if (dev.getName() == null || "".equals(dev.getName(), ignoreCase = true)) entries[i] =
+        for (dev in adapter.bondedDevices) {
+            if (dev.name == null || "" == dev.name) entries[i] =
                 "UNKNOWN"
-            else entries[i] = dev.getName()
-            entryValues[i] = dev.getAddress()
+            else entries[i] = dev.name
+            entryValues[i] = dev.address
             i++
         }
 
@@ -379,16 +378,16 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
         val adapter = BluetoothAdapter.getDefaultAdapter()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) if (ActivityCompat.checkSelfPermission(
-                context!!,
+                requireContext(),
                 Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            bluetoothDevices!!.setSummary(R.string.nobt)
+            bluetoothDevices!!.summary = getString(R.string.nobt)
             return
         }
 
         if (adapter == null || !adapter.isEnabled) {
-            bluetoothDevices!!.setSummary(R.string.settings_bluetooth_selected_bluetooth_devices_turn_on)
+            bluetoothDevices!!.summary = getString(R.string.settings_bluetooth_selected_bluetooth_devices_turn_on)
             return
         }
         if (bluetoothDevices != null) {
@@ -397,8 +396,7 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
                 .collect(Collectors.toSet())
 
             if (values.isNotEmpty()) {
-                bluetoothDevices.setSummary(
-                    values.stream()
+                bluetoothDevices.summary = values.stream()
                         .map<CharSequence?> { v: String? ->
                             val indexOfValue = bluetoothDevices.findIndexOfValue(v)
                             if (indexOfValue >= 0) {
@@ -406,9 +404,8 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
                             }
                             getString(R.string.settings_bluetooth_selected_bluetooth_devices_forgotten_device)
                         }.collect(Collectors.joining(", "))
-                )
             } else {
-                bluetoothDevices.setSummary(R.string.settings_bluetooth_selected_bluetooth_devices_description)
+                bluetoothDevices.summary = getString(R.string.settings_bluetooth_selected_bluetooth_devices_description)
             }
         }
     }

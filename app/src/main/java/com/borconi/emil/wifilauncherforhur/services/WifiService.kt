@@ -26,6 +26,7 @@ import androidx.lifecycle.Observer
 import androidx.preference.PreferenceManager
 import com.borconi.emil.wifilauncherforhur.R
 import com.borconi.emil.wifilauncherforhur.WiFiLauncherServiceWidget
+import com.borconi.emil.wifilauncherforhur.activities.MainActivity
 import com.borconi.emil.wifilauncherforhur.connectivity.Connector
 import com.borconi.emil.wifilauncherforhur.connectivity.NDSConnector
 import com.borconi.emil.wifilauncherforhur.connectivity.WiFiP2PConnector
@@ -48,7 +49,7 @@ class WifiService : Service() {
         mustexit = false
         System.setProperty(
             "dexmaker.dexcache",
-            getCacheDir().getPath()
+            cacheDir.path
         )
 
 
@@ -60,6 +61,22 @@ class WifiService : Service() {
         verifyOrCreateNotificationChannels()
         notification = getNotification(this, getString(R.string.service_wifi_looking_text))
         startForeground(NOTIFICATION_ID, notification!!.build())
+
+        if (!hasPermissions()) {
+            val notificationIntent = Intent(this, MainActivity::class.java)
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                notificationIntent,
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            notification?.setContentText(getString(R.string.permission_missing))
+            notification?.setContentIntent(pendingIntent)
+            notificationManager?.notify(NOTIFICATION_ID, notification!!.build())
+            stopSelf()
+            return
+        }
+
 
         val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
         val connectionmode = sharedPreferences.getString("connection_mode", "1")!!.toInt()
@@ -73,6 +90,16 @@ class WifiService : Service() {
         val carConnection = CarConnection(this)
         typeLiveData = carConnection.type
         typeLiveData!!.observeForever(AAObserver)
+    }
+
+    private fun hasPermissions(): Boolean {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.NEARBY_WIFI_DEVICES) != PackageManager.PERMISSION_GRANTED) {
+            return false
+        }
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return false
+        }
+        return true
     }
 
     private val AAObserver: Observer<Int?> = object : Observer<Int?> {
@@ -110,10 +137,10 @@ class WifiService : Service() {
                 getString(R.string.notification_channel_default_name),
                 NotificationManager.IMPORTANCE_DEFAULT
             )
-            channel.setDescription(getString(R.string.notification_channel_default_description))
+            channel.description = getString(R.string.notification_channel_default_description)
             channel.enableVibration(false)
             channel.setSound(null, null)
-            channel.setLockscreenVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            channel.lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             notificationManager!!.createNotificationChannel(channel)
         }
 
@@ -127,9 +154,9 @@ class WifiService : Service() {
                 getString(R.string.notification_channel_high_name),
                 NotificationManager.IMPORTANCE_HIGH
             )
-            channel.setDescription(getString(R.string.notification_channel_high_description))
+            channel.description = getString(R.string.notification_channel_high_description)
             channel.enableVibration(true)
-            channel.setLockscreenVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            channel.lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             notificationManager!!.createNotificationChannel(channel)
         }
     }
@@ -149,7 +176,7 @@ class WifiService : Service() {
                 .setTicker(getString(R.string.service_wifi_ticker))
 
         val turnOffIntent = Intent(context, WifiReceiver::class.java)
-        turnOffIntent.setAction(WifiReceiver.Companion.ACTION_WIFI_LAUNCHER_EXIT)
+        turnOffIntent.action = WifiReceiver.ACTION_WIFI_LAUNCHER_EXIT
         turnOffIntent.putExtra(NotificationCompat.EXTRA_NOTIFICATION_ID, 0)
 
 
@@ -179,7 +206,7 @@ class WifiService : Service() {
 
     private fun updateWidget(id: Int) {
         val intent = Intent(this, WiFiLauncherServiceWidget::class.java)
-        intent.setAction(WiFiLauncherServiceWidget.WIDGET_ACTION)
+        intent.action = WiFiLauncherServiceWidget.WIDGET_ACTION
         val pd = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
 
@@ -245,14 +272,14 @@ class WifiService : Service() {
         ) return
 
         bluetoothAdapter
-        val pairedDevices = bluetoothAdapter.getBondedDevices()
+        val pairedDevices = bluetoothAdapter.bondedDevices
         val selectedBluetoothMacs = pref.getStringSet("selected_bluetooth_devices", null)
         if (selectedBluetoothMacs == null) return
 
         for (device in pairedDevices) {
-            Log.d("WiFi Service", "Bonded device: " + device.getName())
+            Log.d("WiFi Service", "Bonded device: " + device.name)
             if (isConnected(device)) {
-                val deviceAddress = device.getAddress()
+                val deviceAddress = device.address
                 if (selectedBluetoothMacs.contains(deviceAddress)) stillconnected = true
             }
         }
@@ -289,8 +316,7 @@ class WifiService : Service() {
         fun isConnected(device: BluetoothDevice): Boolean {
             try {
                 val m = device.javaClass.getMethod("isConnected")
-                val connected = m.invoke(device) as Boolean
-                return connected
+                return m.invoke(device) as Boolean
             } catch (e: Exception) {
                 throw IllegalStateException(e)
             }
