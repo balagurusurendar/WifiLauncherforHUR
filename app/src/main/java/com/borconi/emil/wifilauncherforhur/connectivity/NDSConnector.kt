@@ -95,6 +95,7 @@ class NDSConnector(
         if (serviceInfo!=null){
             val hostIpAddress = serviceInfo.hostAddresses[0].hostAddress
             Log.d(TAG, "Host IP address: $hostIpAddress")
+            this.network = serviceInfo.network
             startAA(hostIpAddress)
             found = true
             stopDiscover()
