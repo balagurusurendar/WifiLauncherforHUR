@@ -29,7 +29,6 @@ import com.borconi.emil.wifilauncherforhur.connectivity.WiFiP2PConnector
 import org.mockito.Mockito
 import java.util.Locale
 
-@SuppressLint("MissingPermission")
 class WiFiDirectBroadcastReceiver(
     private val manager: WifiP2pManager?,
     private val channel: WifiP2pManager.Channel?,
