@@ -31,11 +31,20 @@ import com.borconi.emil.wifilauncherforhur.connectivity.Connector
 import com.borconi.emil.wifilauncherforhur.connectivity.NDSConnector
 import com.borconi.emil.wifilauncherforhur.connectivity.WiFiP2PConnector
 import com.borconi.emil.wifilauncherforhur.receivers.WifiReceiver
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.invoke
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.util.Random
 import java.util.concurrent.atomic.AtomicBoolean
 
 class WifiService : Service() {
-    private var connector: Connector? = null
+    private lateinit var connector: Connector
 
     private var notificationManager: NotificationManager? = null
 
@@ -44,6 +53,12 @@ class WifiService : Service() {
     private var notification: NotificationCompat.Builder? = null
 
     private var typeLiveData: LiveData<Int?>? = null
+
+    private val serviceJob = SupervisorJob()
+    val serviceScope = CoroutineScope(Dispatchers.Default+serviceJob+ CoroutineName("WifiService"))
+
+    private var lastStartId = -1
+
     override fun onCreate() {
         super.onCreate()
         mustexit = false
@@ -73,17 +88,20 @@ class WifiService : Service() {
             notification?.setContentText(getString(R.string.permission_missing))
             notification?.setContentIntent(pendingIntent)
             notificationManager?.notify(NOTIFICATION_ID, notification!!.build())
-            stopSelf()
+            stopSelf(lastStartId)
             return
         }
 
 
         val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
         val connectionmode = sharedPreferences.getString("connection_mode", "1")!!.toInt()
-        if (connectionmode == 2) {
-            connector = WiFiP2PConnector(notificationManager!!, notification!!, this)
+        connector = if (connectionmode == 2) {
+            WiFiP2PConnector(notificationManager!!, notification!!, this@WifiService)
         } else {
-            connector = NDSConnector(notificationManager!!, notification!!, this)
+            NDSConnector(notificationManager!!, notification!!, this@WifiService)
+        }
+        serviceScope.launch {
+            connector.start()
         }
 
         isRunning = true
@@ -110,7 +128,7 @@ class WifiService : Service() {
             Log.d("WiFiService", "Connection state: $connectionState")
             when (connectionState) {
                 CarConnection.CONNECTION_TYPE_NOT_CONNECTED -> {
-                    if (connected.get()) stopSelf()
+                    if (connected.get()) stopSelf(lastStartId)
                     connected.set(false)
                 }
 
@@ -227,70 +245,81 @@ class WifiService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent != null) if (ACTION_FOREGROUND_STOP == intent.action) {
-            Log.d("WifiService", "Stop service")
-            mustexit = true
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-        } else {
-            if (isRunning) return START_STICKY
-            Log.d("WifiService", "Start service")
-            super.onStartCommand(intent, flags, startId)
+
+        if (isStoppingService){
+            Log.d("WifiService", "Stop Service Going On")
+            return START_REDELIVER_INTENT
         }
-        else {
-            if (isRunning) return START_STICKY
-            super.onStartCommand(intent, flags, startId)
+        if (isRunning){
+            Log.d("WifiService", "Service already Running")
+            lastStartId = startId
+            return START_STICKY
         }
-
-
-
+        super.onStartCommand(intent, flags, startId)
+        lastStartId = startId
         return START_STICKY
     }
 
 
     override fun onDestroy() {
         super.onDestroy()
-        try {
-            connector!!.stop()
-        } catch (e: Exception) {
-        }
-
-        connected.set(false)
         isRunning = false
+        isStoppingService = true
         typeLiveData!!.removeObserver(AAObserver)
-
-        val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
-        val bluetoothAdapter = bluetoothManager.adapter
-        val pref = PreferenceManager.getDefaultSharedPreferences(this)
-        var stillconnected = false
-        if (mustexit) return
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
-        ) return
-
-        bluetoothAdapter
-        val pairedDevices = bluetoothAdapter.bondedDevices
-        val selectedBluetoothMacs = pref.getStringSet("selected_bluetooth_devices", null)
-        if (selectedBluetoothMacs == null) return
-
-        for (device in pairedDevices) {
-            Log.d("WiFi Service", "Bonded device: " + device.name)
-            if (isConnected(device)) {
-                val deviceAddress = device.address
-                if (selectedBluetoothMacs.contains(deviceAddress)) stillconnected = true
+        connected.set(false)
+        connector.removeIntentReceivers()
+        serviceScope.launch {
+            serviceJob.cancel()
+            try {
+                connector.stop()
+            } catch (e: Exception) {
             }
+
+            val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
+            val bluetoothAdapter = bluetoothManager.adapter
+            val pref = PreferenceManager.getDefaultSharedPreferences(this@WifiService)
+            var stillconnected = false
+            if (mustexit){
+                isStoppingService = false
+                return@launch
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
+                    this@WifiService,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED
+            ){
+                isStoppingService = false
+                return@launch
+            }
+
+            bluetoothAdapter
+            val pairedDevices = bluetoothAdapter.bondedDevices
+            val selectedBluetoothMacs = pref.getStringSet("selected_bluetooth_devices", null)
+            if (selectedBluetoothMacs == null){
+                isStoppingService = false
+                return@launch
+            }
+
+            for (device in pairedDevices) {
+                Log.d("WiFi Service", "Bonded device: " + device.name)
+                if (isConnected(device)) {
+                    val deviceAddress = device.address
+                    if (selectedBluetoothMacs.contains(deviceAddress)) stillconnected = true
+                }
+            }
+            Log.d("This", "We are still connected to the BT: " + stillconnected)
+            if (stillconnected && pref.getBoolean(
+                    "keep_running",
+                    false
+                ) && !pref.getBoolean("ignore_bt_disconnect", false)
+            ) {
+                startForegroundService(
+                    Intent(this@WifiService, WifiService::class.java)
+                )
+            }
+            isStoppingService = false
         }
-        Log.d("This", "We are still connected to the BT: " + stillconnected)
-        if (stillconnected && pref.getBoolean(
-                "keep_running",
-                false
-            ) && !pref.getBoolean("ignore_bt_disconnect", false)
-        ) startForegroundService(
-            Intent(this, WifiService::class.java)
-        )
     }
 
 
@@ -299,6 +328,7 @@ class WifiService : Service() {
     }
 
     companion object {
+        var isStoppingService = false
         const val NOTIFICATION_ID: Int = 1035
         private const val NOTIFICATION_CHANNEL_NO_VIBRATION_DEFAULT_ID =
             "wifilauncher_notification_channel_no_vibration_default"

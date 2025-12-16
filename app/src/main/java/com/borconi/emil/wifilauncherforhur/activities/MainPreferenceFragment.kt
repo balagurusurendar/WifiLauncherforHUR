@@ -31,9 +31,12 @@ import com.borconi.emil.wifilauncherforhur.EmptyListPreference
 import com.borconi.emil.wifilauncherforhur.R
 import com.borconi.emil.wifilauncherforhur.services.WifiService
 import com.borconi.emil.wifilauncherforhur.services.WifiService.Companion.isRunning
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.stream.Collectors
 
-class MainPreferenceFragment : PreferenceFragmentCompat() {
+class MainPreferenceFragment(val mainScope: CoroutineScope) : PreferenceFragmentCompat() {
     private var alertDialogOpen = false
     private var bluetoothDevicesPreference: Preference? = null
 
@@ -62,15 +65,11 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
         }
 
         if (isRunning) {
-            requireActivity().stopService(Intent(context, WifiService::class.java))
-            Thread {
-                try {
-                    Thread.sleep(500)
-                    requireActivity().startService(Intent(context, WifiService::class.java))
-                } catch (e: InterruptedException) {
-                    throw RuntimeException(e)
-                }
-            }.start()
+            mainScope.launch {
+                requireActivity().stopService(Intent(context, WifiService::class.java))
+                delay(1000)
+                requireActivity().startService(Intent(context, WifiService::class.java))
+            }
         }
         return true
     }
@@ -124,10 +123,10 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
             preferenceScreen.findPreference<Preference?>("start_service_manually")
         startServiceManuallyPreference?.onPreferenceClickListener =
             Preference.OnPreferenceClickListener { _: Preference? ->
-                val context = context
-                val wifiServiceIntent = Intent(context, WifiService::class.java)
-
-                context?.startForegroundService(wifiServiceIntent)
+                mainScope.launch {
+                    val wifiServiceIntent = Intent(context, WifiService::class.java)
+                    context?.startForegroundService(wifiServiceIntent)
+                }
                 true
             }
 
@@ -253,9 +252,10 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
         if (fromBluetoothReceiver){
             if (getPermission(false)){
                 fromBluetoothReceiver = false
-                val wifiServiceIntent = Intent(context, WifiService::class.java)
-
-                requireContext().startForegroundService(wifiServiceIntent)
+                mainScope.launch {
+                    val wifiServiceIntent = Intent(context, WifiService::class.java)
+                    requireContext().startForegroundService(wifiServiceIntent)
+                }
             }
         }else{
             getPermission(true)

@@ -12,14 +12,18 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.borconi.emil.wifilauncherforhur.R
 import com.borconi.emil.wifilauncherforhur.services.WifiService
+import kotlinx.coroutines.CoroutineScope
 import org.mockito.Mockito
 
 open class Connector(
     var notificationManager: NotificationManager,
     var notification: NotificationCompat.Builder,
-    var context: Context
+    var context: WifiService
 ) {
     var network: Network? = null
+
+    open suspend fun start(){
+    }
 
     fun getAAIntent(ip: String?): Intent? {
         if (network == null) {
@@ -78,7 +82,10 @@ open class Connector(
         )
     }
 
-    open fun stop() {
+    open suspend fun stop() {
+    }
+
+    open fun removeIntentReceivers(){
     }
 
     companion object {

@@ -6,9 +6,15 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import com.borconi.emil.wifilauncherforhur.R
 import com.borconi.emil.wifilauncherforhur.WiFiLauncherServiceWidget
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 
 class MainActivity : AppCompatActivity() {
-    private val mainPreferenceFragment = MainPreferenceFragment()
+
+    private val mainScope = CoroutineScope(Dispatchers.Main+ CoroutineName("WifiLauncher"))
+    private val mainPreferenceFragment = MainPreferenceFragment(mainScope)
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.AppTheme_WiFiLauncher)
         super.onCreate(savedInstanceState)
@@ -29,6 +35,11 @@ class MainActivity : AppCompatActivity() {
     fun onWidgetClick(view: View?) {
         val intent = Intent(WiFiLauncherServiceWidget.WIDGET_ACTION)
         sendBroadcast(intent)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mainScope.cancel()
     }
 
     companion object{

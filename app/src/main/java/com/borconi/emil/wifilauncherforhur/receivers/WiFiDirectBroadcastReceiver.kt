@@ -1,12 +1,9 @@
 package com.borconi.emil.wifilauncherforhur.receivers
 
-import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.net.ConnectivityManager
-import android.net.ConnectivityManager.NetworkCallback
 import android.net.MacAddress
 import android.net.Network
 import android.net.wifi.WifiManager
@@ -16,23 +13,22 @@ import android.net.wifi.p2p.WifiP2pGroup
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import android.net.wifi.p2p.WifiP2pManager.PeerListListener
-import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.Parcel
 import android.util.Log
 import android.widget.Toast
-import androidx.annotation.RequiresApi
-import androidx.preference.Preference
 import androidx.preference.PreferenceManager
 import com.borconi.emil.wifilauncherforhur.connectivity.WiFiP2PConnector
+import com.borconi.emil.wifilauncherforhur.services.WifiService
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.mockito.Mockito
 import java.util.Locale
 
 class WiFiDirectBroadcastReceiver(
-    private val manager: WifiP2pManager?,
-    private val channel: WifiP2pManager.Channel?,
-    private val mService: Context,
+    private val manager: WifiP2pManager,
+    private val channel: WifiP2pManager.Channel,
+    private val mService: WifiService,
     private val connector: WiFiP2PConnector
 ) : BroadcastReceiver(), PeerListListener {
     private val lookfor: String = PreferenceManager.getDefaultSharedPreferences(mService)
@@ -41,22 +37,16 @@ class WiFiDirectBroadcastReceiver(
     private var discoveryStarted = false
     private var hurfound = false
 
-    // Add these new variables
-    private val connectivityManager: ConnectivityManager
+    private var loopingStarted = false
 
-    private val wifiManager: WifiManager
+    // Add these new variables
+
+    private val wifiManager: WifiManager = mService.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
     private var customFrequencyFailed = false
-    private val preference : SharedPreferences
+    private val preference : SharedPreferences = PreferenceManager.getDefaultSharedPreferences(mService)
     init {
-
-        // Initialize ConnectivityManager
-        this.connectivityManager =
-            mService.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        this.wifiManager = mService.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        this.preference = PreferenceManager.getDefaultSharedPreferences(mService)
-
-        Log.d("WiFi-P2P", "Look for Device with following name:" + lookfor)
+        Log.d("WiFi-P2P", "Look for Device with following name:$lookfor")
     }
 
     override fun onReceive(context: Context?, intent: Intent) {
@@ -64,22 +54,22 @@ class WiFiDirectBroadcastReceiver(
 
 
 
-        Log.d("WifiP2P", "Action is: " + action)
+        Log.d("WifiP2P", "Action is: $action")
         if (WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION == action) {
             if (intent.getIntExtra(
                     WifiP2pManager.EXTRA_WIFI_STATE,
                     WifiP2pManager.WIFI_P2P_STATE_ENABLED
                 ) == WifiP2pManager.WIFI_P2P_STATE_ENABLED
             ) {
-                Log.d("WifiP2P", "Wifi p2p is enabled: " + intent)
-                startDiscovery()
+                Log.d("WifiP2P", "Wifi p2p is enabled: $intent")
+                loopDiscovery()
                 //Wifi P2P is enabled.
             }
             // Check to see if Wi-Fi is enabled and notify appropriate activity
         } else if (WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION == action) {
-            if (manager != null) {
-                if (hurfound) return
-                manager.requestPeers(channel, this)
+            if (hurfound) return
+            mService.serviceScope.launch {
+                manager.requestPeers(channel, this@WiFiDirectBroadcastReceiver)
             }
             // Call WifiP2pManager.requestPeers() to get a list of current peers
         } else if (WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION == action) {
@@ -88,57 +78,84 @@ class WiFiDirectBroadcastReceiver(
                 intent.getParcelableExtra<WifiP2pInfo?>(WifiP2pManager.EXTRA_WIFI_P2P_INFO)
             if (p2pInfo !=null){
                 val groupInfo = intent.getParcelableExtra<WifiP2pGroup>(WifiP2pManager.EXTRA_WIFI_P2P_GROUP)
-                connectToAA(p2pInfo, groupInfo);
-            }
-        }
-    }
-
-
-    private fun startDiscovery() {
-        if (discoveryStarted || hurfound) {
-            return
-        }
-        manager!!.discoverPeers(channel, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() {
-                discoveryStarted = true;
-                Log.d("WifiP2P", "P2P discovery started")
-                loopDiscovery()
-            }
-
-            override fun onFailure(i: Int) {
-                Log.e("WifiP2P", "P2P FAILED to start")
-                val handler = Handler(Looper.getMainLooper())
-                handler.postDelayed(Runnable { startDiscovery() }, 2000)
-            }
-        })
-    }
-
-    private fun stopDiscovery(restart: Boolean) {
-        if (!discoveryStarted){
-            return
-        }
-        manager!!.stopPeerDiscovery(channel, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() {
-                discoveryStarted = false
-                Log.d("WifiP2P", "Discovery stopped")
-                if (restart) {
-                    Log.d("WifiP2P", "Restarting discovery")
-                    startDiscovery()
+                mService.serviceScope.launch {
+                    connectToAA(p2pInfo, groupInfo);
                 }
             }
-
-            override fun onFailure(i: Int) {
-                Log.e("WifiP2P", "Discovery NOT stopped!")
-            }
-        })
-    }
-
-    private fun loopDiscovery() {
-        if (discoveryStarted) {
-            val handler = Handler(Looper.getMainLooper())
-            handler.postDelayed(Runnable { stopDiscovery(!hurfound) }, 10000)
         }
     }
+
+
+    private suspend fun startDiscovery() : Boolean {
+        if (hurfound){
+            return false
+        }
+        if (discoveryStarted) {
+            return true
+        }
+        return suspendCancellableCoroutine<Boolean> { continuation ->
+            manager.discoverPeers(channel, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() {
+                    discoveryStarted = true;
+                    Log.d("WifiP2P", "P2P discovery started")
+                    if (continuation.isActive){
+                        continuation.resumeWith(Result.success(true))
+                    }
+                }
+
+                override fun onFailure(i: Int) {
+                    Log.e("WifiP2P", "P2P FAILED to start")
+                    if (continuation.isActive){
+                        continuation.resumeWith(Result.success(false))
+                    }
+                }
+            })
+        }
+    }
+
+    private suspend fun stopDiscovery() : Boolean {
+        if (!discoveryStarted){
+            return true
+        }
+        return suspendCancellableCoroutine { continuation ->
+            manager.stopPeerDiscovery(channel, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() {
+                    discoveryStarted = false
+                    Log.d("WifiP2P", "Discovery stopped")
+                    if (continuation.isActive){
+                        continuation.resumeWith(Result.success(true))
+                    }
+                }
+
+                override fun onFailure(i: Int) {
+                    Log.e("WifiP2P", "Discovery NOT stopped!")
+                    if (continuation.isActive){
+                        continuation.resumeWith(Result.success(false))
+                    }
+                }
+            })
+        }
+    }
+
+    private fun loopDiscovery(){
+        if (loopingStarted) {
+            return
+        }
+        loopingStarted = true
+        mService.serviceScope.launch {
+            while (!hurfound) {
+                startDiscovery()
+                // Wait for a few seconds before stopping discovery to allow time for peers to be found.
+                delay(10000)
+                if (hurfound) break // Exit loop immediately if HUR is found during the delay
+                stopDiscovery()
+                // Wait a moment before starting the next discovery cycle.
+                delay(2000)
+            }
+            loopingStarted = false
+        }
+    }
+
 
     private fun get2GhzFrequency(): Int {
         // Define all standard 2.4 GHz channels and their center frequencies in MHz.
@@ -235,7 +252,7 @@ class WiFiDirectBroadcastReceiver(
     }
 
     override fun onPeersAvailable(wifiP2pDeviceList: WifiP2pDeviceList) {
-        for (device in wifiP2pDeviceList.getDeviceList()) {
+        for (device in wifiP2pDeviceList.deviceList) {
             Log.d("WifiP2P", "Found device: " + device.deviceName)
             if (device.deviceName.lowercase(Locale.getDefault()).contains(lookfor)) {
                 hurfound = true
@@ -258,7 +275,7 @@ class WiFiDirectBroadcastReceiver(
                 }
                 val config = configBuilder.build()
                 config.groupOwnerIntent = 0
-                manager!!.connect(channel, config, object : WifiP2pManager.ActionListener {
+                manager.connect(channel, config, object : WifiP2pManager.ActionListener {
                     override fun onSuccess() {
                         Log.d("WifiP2P", "Connected to: " + device)
                     }
@@ -273,7 +290,7 @@ class WiFiDirectBroadcastReceiver(
                             Toast.makeText(mService, "Selected Custom Frequency failed so moving to auto", Toast.LENGTH_LONG).show()
                             customFrequencyFailed = true
                         }
-                        startDiscovery()
+                        mService.serviceScope.launch { loopDiscovery() }
                     }
                 })
                 break
@@ -285,7 +302,7 @@ class WiFiDirectBroadcastReceiver(
         if (wifiP2pInfo.groupFormed){
             if (wifiP2pInfo.isGroupOwner) {
                 Log.d("WifiP2P", "me assigned as group owner so removing group & restart")
-                manager!!.removeGroup(channel, object : WifiP2pManager.ActionListener {
+                manager.removeGroup(channel, object : WifiP2pManager.ActionListener {
                     override fun onFailure(reason: Int) {
                         Log.d("WifiP2P", "Failed to remove group:")
                     }
@@ -293,7 +310,9 @@ class WiFiDirectBroadcastReceiver(
                     override fun onSuccess() {
                         Log.d("WifiP2P", "Group removed. starting discovery again")
                         hurfound = false
-                        startDiscovery()
+                        mService.serviceScope.launch {
+                            loopDiscovery()
+                        }
                     }
                 })
             } else {
@@ -314,12 +333,15 @@ class WiFiDirectBroadcastReceiver(
                         connector.network = Network.CREATOR.createFromParcel(p)
                     }
                 }
-                connector.startAA(wifiP2pInfo.groupOwnerAddress.hostAddress)
+                mService.serviceScope.launch {
+                    connector.startAA(wifiP2pInfo.groupOwnerAddress.hostAddress)
+                }
             }
         }
     }
 
-    fun stop(){
-        stopDiscovery(false)
+    suspend fun stop(){
+        hurfound = true
+        stopDiscovery()
     }
 }

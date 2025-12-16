@@ -5,22 +5,101 @@ import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdManager.DiscoveryListener
 import android.net.nsd.NsdServiceInfo
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.borconi.emil.wifilauncherforhur.services.WifiService
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class NDSConnector(
     notificationManager: NotificationManager,
     notification: NotificationCompat.Builder,
-    context: Context
-) : Connector(notificationManager, notification, context), DiscoveryListener, NsdManager.ResolveListener {
+    context: WifiService
+) : Connector(notificationManager, notification, context){
     private val mNsdManager: NsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
 
     private var discoveryStarted = false
     private var found = false
 
-    init {
+    val discoveryListener = object : DiscoveryListener{
+        override fun onDiscoveryStarted(serviceType: String?) {
+            Log.d(TAG, "Service discovery started")
+            context.serviceScope.launch {
+                delay(10000)
+                stopDiscover()
+            }
+        }
+
+        override fun onDiscoveryStopped(serviceType: String?) {
+            Log.d(TAG, "Discovery stopped: $serviceType")
+            context.serviceScope.launch {
+                delay(2000)
+                if (!found){
+                    startDiscover()
+                }
+            }
+        }
+
+        override fun onServiceFound(serviceInfo: NsdServiceInfo?) {
+            Log.d(TAG, "Service found: $serviceInfo")
+            if (serviceInfo!=null){
+                startServiceResolution(serviceInfo)
+            }
+        }
+
+        override fun onServiceLost(serviceInfo: NsdServiceInfo?) {
+            Log.d(TAG, "Service Lost Starting Rediscover")
+            found = false
+            context.serviceScope.launch {
+                delay(2000)
+                if (!found){
+                    startDiscover()
+                }
+            }
+        }
+
+        override fun onStartDiscoveryFailed(serviceType: String?, errorCode: Int) {
+            Log.d(TAG, "Start Discovery Failed Restarting")
+            discoveryStarted = false
+            context.serviceScope.launch {
+                delay(10000)
+                if (!found){
+                    startDiscover()
+                }
+            }
+        }
+
+        override fun onStopDiscoveryFailed(serviceType: String?, errorCode: Int) {
+            Log.d(TAG, "Stop Discovery Failed")
+        }
+
+    }
+
+    val resolveListener = object : NsdManager.ResolveListener{
+        override fun onResolveFailed(
+            serviceInfo: NsdServiceInfo?,
+            errorCode: Int
+        ) {
+            Log.d(TAG, "Resolve Failed with error code $errorCode")
+        }
+
+        override fun onServiceResolved(serviceInfo: NsdServiceInfo?) {
+            Log.d(TAG, "Service resolved: $serviceInfo")
+            if (serviceInfo!=null){
+                val hostIpAddress = serviceInfo.hostAddresses[0].hostAddress
+                Log.d(TAG, "Host IP address: $hostIpAddress")
+                this@NDSConnector.network = serviceInfo.network
+                context.serviceScope.launch {
+                    startAA(hostIpAddress)
+                }
+                found = true
+                stopServiceResolution()
+                stopDiscover()
+            }
+        }
+    }
+
+    override suspend fun start() {
         startDiscover()
     }
 
@@ -28,7 +107,7 @@ class NDSConnector(
         if (discoveryStarted || found){
             return
         }
-        mNsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, this)
+        mNsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
         discoveryStarted = true;
     }
 
@@ -36,70 +115,27 @@ class NDSConnector(
         if (!discoveryStarted){
             return
         }
-        mNsdManager.stopServiceDiscovery(this)
+        mNsdManager.stopServiceDiscovery(discoveryListener)
         discoveryStarted = false
     }
 
-    override fun stop() {
+    private fun startServiceResolution(serviceInfo : NsdServiceInfo){
+        if (!found){
+            mNsdManager.resolveService(serviceInfo,  resolveListener)
+        }
+    }
+
+    private fun stopServiceResolution() {
+        try {
+            mNsdManager.stopServiceResolution(resolveListener)
+        }catch (_ : Exception){
+        }
+    }
+
+    override suspend fun stop() {
         found = true
+        stopServiceResolution()
         stopDiscover()
-    }
-
-    override fun onDiscoveryStarted(serviceType: String?) {
-        Log.d(TAG, "Service discovery started")
-
-        val handler = Handler(Looper.getMainLooper())
-        handler.postDelayed(this::stopDiscover, 10000)
-    }
-
-    override fun onDiscoveryStopped(serviceType: String?) {
-        Log.d(TAG, "Discovery stopped: $serviceType")
-        if (!found){
-            startDiscover()
-        }
-    }
-
-    override fun onServiceFound(serviceInfo: NsdServiceInfo?) {
-        Log.d(TAG, "Service found: $serviceInfo")
-        if (!found){
-            mNsdManager.resolveService(serviceInfo, this);
-        }
-    }
-
-    override fun onServiceLost(serviceInfo: NsdServiceInfo?) {
-        Log.d(TAG, "Service Lost Starting Rediscover")
-        found = false
-        startDiscover()
-    }
-
-    override fun onStartDiscoveryFailed(serviceType: String?, errorCode: Int) {
-        Log.d(TAG, "Start Discovery Failed Restarting")
-        discoveryStarted = false
-        val handler = Handler(Looper.getMainLooper())
-        handler.postDelayed(this::startDiscover, 10000)
-    }
-
-    override fun onStopDiscoveryFailed(serviceType: String?, errorCode: Int) {
-        Log.d(TAG, "Stop Discovery Failed")
-    }
-
-    override fun onResolveFailed(
-        serviceInfo: NsdServiceInfo?,
-        errorCode: Int
-    ) {
-        Log.d(TAG, "Resolve Failed with error code $errorCode")
-    }
-
-    override fun onServiceResolved(serviceInfo: NsdServiceInfo?) {
-        Log.d(TAG, "Service resolved: $serviceInfo")
-        if (serviceInfo!=null){
-            val hostIpAddress = serviceInfo.hostAddresses[0].hostAddress
-            Log.d(TAG, "Host IP address: $hostIpAddress")
-            this.network = serviceInfo.network
-            startAA(hostIpAddress)
-            found = true
-            stopDiscover()
-        }
     }
 
     companion object {
