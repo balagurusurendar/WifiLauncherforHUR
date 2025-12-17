@@ -57,7 +57,7 @@
     <string name="network_discovery">Network Discovery (both devices should be on same network)</string>
     <string name="use_wifip2p">Use WiFi Direct (also know as WiFi P2P)</string>
     <string name="client_mode">WiFi client mode (car headunit will create hotspot)</string>
-    <string name="tether">Create WiFi hotspot (won\\\'t work on all devices!)</string>
+    <string name="tether">Create WiFi hotspot (You Need to Make Hotspot Yourself)</string>
     <string name="wifi_not_enabled_waiting">Wi-Fi is not enabled. Waiting for Wifi to be enabled.</string>
     <string name="select_wifi_frequency">Select WiFi Frequency</string>
     <string name="wifi_frequency_desc">Selecting Frequency will scan and use least populated channel</string>
