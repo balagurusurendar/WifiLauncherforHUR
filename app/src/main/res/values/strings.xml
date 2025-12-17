@@ -65,5 +65,6 @@
     <string name="wifi_5ghz">5 Ghz</string>
     <string name="wifi_auto">Auto</string>
     <string name="permission_missing">Permission missing, please grant it in the app</string>
+    <string name="stopping_service">Stopping Service</string>
 
 </resources>

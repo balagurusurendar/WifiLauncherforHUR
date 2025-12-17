@@ -6,14 +6,12 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.appwidget.AppWidgetManager
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Network
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -35,22 +33,18 @@ import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.invoke
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import java.util.Random
 import java.util.concurrent.atomic.AtomicBoolean
 
 class WifiService : Service() {
-    private lateinit var connector: Connector
+    private var connector : Connector? = null
 
-    private var notificationManager: NotificationManager? = null
+    private lateinit var notificationManager: NotificationManager;
 
 
     private var pendingIntent: PendingIntent? = null
-    private var notification: NotificationCompat.Builder? = null
+    private lateinit var notification: NotificationCompat.Builder;
 
     private var typeLiveData: LiveData<Int?>? = null
 
@@ -75,7 +69,7 @@ class WifiService : Service() {
 
         verifyOrCreateNotificationChannels()
         notification = getNotification(this, getString(R.string.service_wifi_looking_text))
-        startForeground(NOTIFICATION_ID, notification!!.build())
+        startForeground(NOTIFICATION_ID, notification.build())
 
         if (!hasPermissions()) {
             val notificationIntent = Intent(this, MainActivity::class.java)
@@ -85,9 +79,19 @@ class WifiService : Service() {
                 notificationIntent,
                 PendingIntent.FLAG_IMMUTABLE
             )
-            notification?.setContentText(getString(R.string.permission_missing))
-            notification?.setContentIntent(pendingIntent)
-            notificationManager?.notify(NOTIFICATION_ID, notification!!.build())
+
+
+            val notification =
+                NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_NO_VIBRATION_DEFAULT_ID)
+                    .setContentTitle(getString(R.string.service_wifi_title))
+                    .setContentText(getString(R.string.permission_missing))
+                    .setContentIntent(pendingIntent)
+                    .setAutoCancel(false)
+                    .setOnlyAlertOnce(true)
+                    .setSmallIcon(R.drawable.ic_aa_wifi_notification)
+                    .setTicker(getString(R.string.service_wifi_ticker))
+            notification.setContentIntent(pendingIntent)
+            notificationManager.notify(PERMISSION_MISS_NOTIFY_ID, notification.build())
             stopSelf(lastStartId)
             return
         }
@@ -96,12 +100,14 @@ class WifiService : Service() {
         val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
         val connectionmode = sharedPreferences.getString("connection_mode", "1")!!.toInt()
         connector = if (connectionmode == 2) {
-            WiFiP2PConnector(notificationManager!!, notification!!, this@WifiService)
+            WiFiP2PConnector(notificationManager, notification, this@WifiService)
         } else {
-            NDSConnector(notificationManager!!, notification!!, this@WifiService)
+            NDSConnector(notificationManager, notification, this@WifiService)
         }
         serviceScope.launch {
-            connector.start()
+            if (!connected.get()){
+                connector?.start()
+            }
         }
 
         isRunning = true
@@ -120,33 +126,41 @@ class WifiService : Service() {
         return true
     }
 
-    private val AAObserver: Observer<Int?> = object : Observer<Int?> {
-        override fun onChanged(newValue: Int?) {
-            // newValue is the updated value of myLiveData
-            // Do something with the new value
-            val connectionState: Int = newValue!!
-            Log.d("WiFiService", "Connection state: $connectionState")
-            when (connectionState) {
-                CarConnection.CONNECTION_TYPE_NOT_CONNECTED -> {
-                    if (connected.get()) stopSelf(lastStartId)
-                    connected.set(false)
-                }
-
-                CarConnection.CONNECTION_TYPE_NATIVE -> {}
-                CarConnection.CONNECTION_TYPE_PROJECTION -> {
-                    connected.set(true)
-                    notification!!.setContentText(getString(R.string.connectedtocar))
-                    notificationManager!!.notify(NOTIFICATION_ID, notification!!.build())
-                }
-
-                else -> {}
+    private val AAObserver: Observer<Int?> = Observer { newValue -> // newValue is the updated value of myLiveData
+        // Do something with the new value
+        val connectionState: Int = newValue!!
+        Log.d("WiFiService", "Connection state: $connectionState")
+        when (connectionState) {
+            CarConnection.CONNECTION_TYPE_NOT_CONNECTED -> {
+                if (connected.get()) stopSelf(lastStartId)
+                connected.set(false)
             }
+
+            CarConnection.CONNECTION_TYPE_NATIVE -> {}
+            CarConnection.CONNECTION_TYPE_PROJECTION -> {
+                connected.set(true)
+                notification!!.setContentText(getString(R.string.connectedtocar))
+                notificationManager!!.notify(NOTIFICATION_ID, notification!!.build())
+                if (connector!=null){
+                    connector?.removeIntentReceivers()
+                    serviceScope.launch {
+                        try {
+                            connector?.stop()
+                            connector = null
+                        }catch (e : Exception){
+                            Log.d("WifiService", "Error while stopping connector", e)
+                        }
+                    }
+                }
+            }
+
+            else -> {}
         }
     }
 
 
     private fun verifyOrCreateNotificationChannels() {
-        val notificationChannelNoVibrationDefault = notificationManager!!.getNotificationChannel(
+        val notificationChannelNoVibrationDefault = notificationManager.getNotificationChannel(
             NOTIFICATION_CHANNEL_NO_VIBRATION_DEFAULT_ID
         )
         if (notificationChannelNoVibrationDefault == null) {
@@ -159,11 +173,11 @@ class WifiService : Service() {
             channel.enableVibration(false)
             channel.setSound(null, null)
             channel.lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
-            notificationManager!!.createNotificationChannel(channel)
+            notificationManager.createNotificationChannel(channel)
         }
 
         val notificationChannelWithVibrationImportant =
-            notificationManager!!.getNotificationChannel(
+            notificationManager.getNotificationChannel(
                 NOTIFICATION_CHANNEL_WITH_VIBRATION_IMPORTANT_ID
             )
         if (notificationChannelWithVibrationImportant == null) {
@@ -175,7 +189,7 @@ class WifiService : Service() {
             channel.description = getString(R.string.notification_channel_high_description)
             channel.enableVibration(true)
             channel.lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
-            notificationManager!!.createNotificationChannel(channel)
+            notificationManager.createNotificationChannel(channel)
         }
     }
 
@@ -183,10 +197,22 @@ class WifiService : Service() {
         context: Context,
         contentText: String?
     ): NotificationCompat.Builder {
+        val openAppIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val openAppPendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+
         val builder: NotificationCompat.Builder =
             NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_NO_VIBRATION_DEFAULT_ID)
                 .setContentTitle(getString(R.string.service_wifi_title))
                 .setContentText(contentText)
+                .setContentIntent(openAppPendingIntent)
                 .setAutoCancel(false)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
@@ -267,11 +293,15 @@ class WifiService : Service() {
         isStoppingService = true
         typeLiveData!!.removeObserver(AAObserver)
         connected.set(false)
-        connector.removeIntentReceivers()
+        connector?.removeIntentReceivers()
+        notification.setContentText(getString(R.string.stopping_service))
+        notification.clearActions()
+        notificationManager.notify(NOTIFICATION_ID, notification.build())
+        stopForeground(STOP_FOREGROUND_DETACH)
         serviceScope.launch {
             serviceJob.cancel()
             try {
-                connector.stop()
+                connector?.stop()
             } catch (e: Exception) {
             }
 
@@ -281,6 +311,7 @@ class WifiService : Service() {
             var stillconnected = false
             if (mustexit){
                 isStoppingService = false
+                notificationManager.cancel(NOTIFICATION_ID)
                 return@launch
             }
 
@@ -290,6 +321,7 @@ class WifiService : Service() {
                 ) != PackageManager.PERMISSION_GRANTED
             ){
                 isStoppingService = false
+                notificationManager.cancel(NOTIFICATION_ID)
                 return@launch
             }
 
@@ -298,6 +330,7 @@ class WifiService : Service() {
             val selectedBluetoothMacs = pref.getStringSet("selected_bluetooth_devices", null)
             if (selectedBluetoothMacs == null){
                 isStoppingService = false
+                notificationManager.cancel(NOTIFICATION_ID)
                 return@launch
             }
 
@@ -319,6 +352,7 @@ class WifiService : Service() {
                 )
             }
             isStoppingService = false
+            notificationManager.cancel(NOTIFICATION_ID)
         }
     }
 
@@ -330,13 +364,14 @@ class WifiService : Service() {
     companion object {
         var isStoppingService = false
         const val NOTIFICATION_ID: Int = 1035
+
+        const val PERMISSION_MISS_NOTIFY_ID = 1034
         private const val NOTIFICATION_CHANNEL_NO_VIBRATION_DEFAULT_ID =
             "wifilauncher_notification_channel_no_vibration_default"
         private const val NOTIFICATION_CHANNEL_WITH_VIBRATION_IMPORTANT_ID =
             "wifilauncher_notification_channel_with_vibration_high"
 
         var isRunning: Boolean = false
-        const val ACTION_FOREGROUND_STOP: String = "actionWifiServiceForegroundStop"
 
 
         var connected: AtomicBoolean = AtomicBoolean(false)

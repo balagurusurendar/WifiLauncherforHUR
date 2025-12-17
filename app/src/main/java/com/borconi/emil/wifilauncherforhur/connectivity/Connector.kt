@@ -13,7 +13,9 @@ import androidx.core.app.NotificationCompat
 import com.borconi.emil.wifilauncherforhur.R
 import com.borconi.emil.wifilauncherforhur.services.WifiService
 import kotlinx.coroutines.CoroutineScope
+import org.apache.commons.net.util.SubnetUtils
 import org.mockito.Mockito
+import java.net.NetworkInterface
 
 open class Connector(
     var notificationManager: NotificationManager,
@@ -27,14 +29,18 @@ open class Connector(
 
     fun getAAIntent(ip: String?): Intent? {
         if (network == null) {
+            if (ip!=null){
+                network = fakeNetwork()
+            }
+        }
+        if (network == null){
             val connectivity =
                 context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             network = connectivity.activeNetwork
         }
 
         if (network == null) {
-            notification.setContentText(context.getString(R.string.no_network))
-            notificationManager.notify(WifiService.NOTIFICATION_ID, notification.build())
+            updateNotification(R.string.no_network)
             return null
         }
 
@@ -62,6 +68,26 @@ open class Connector(
         return androidAutoWirelessIntent
     }
 
+
+    private fun fakeNetwork() : Network?{
+        var fakeNetwork: Network? = null
+        try {
+            fakeNetwork = Mockito.mock(
+                Network::class.java,
+                Mockito.withSettings().useConstructor(0)
+            )
+        } catch (e: Exception) {
+        }
+
+        if (fakeNetwork != null) {
+            val p = Parcel.obtain()
+            fakeNetwork.writeToParcel(p, 0)
+            p.setDataPosition(0)
+            return Network.CREATOR.createFromParcel(p)
+        }
+        return null
+    }
+
     val isWiFiConnected: Boolean
         get() {
             val connectivityManager =
@@ -80,6 +106,17 @@ open class Connector(
                 hostIpAddress
             )
         )
+    }
+
+    fun updateNotification(content: Int) {
+        if (!WifiService.connected.get()){
+            notification.setContentText(context.getString(content))
+            notificationManager.notify(WifiService.NOTIFICATION_ID, notification.build())
+        }
+    }
+
+    fun resetNotification(){
+        updateNotification(R.string.service_wifi_looking_text)
     }
 
     open suspend fun stop() {

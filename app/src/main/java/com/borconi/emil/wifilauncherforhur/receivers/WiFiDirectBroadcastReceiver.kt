@@ -316,23 +316,6 @@ class WiFiDirectBroadcastReceiver(
                     }
                 })
             } else {
-                if (groupInfo!=null){
-                    var fakeNetwork: Network? = null
-                    try {
-                        fakeNetwork = Mockito.mock(
-                            Network::class.java,
-                            Mockito.withSettings().useConstructor(groupInfo.networkId)
-                        )
-                    } catch (e: Exception) {
-                    }
-
-                    if (fakeNetwork != null) {
-                        val p = Parcel.obtain()
-                        fakeNetwork.writeToParcel(p, 0)
-                        p.setDataPosition(0)
-                        connector.network = Network.CREATOR.createFromParcel(p)
-                    }
-                }
                 mService.serviceScope.launch {
                     connector.startAA(wifiP2pInfo.groupOwnerAddress.hostAddress)
                 }

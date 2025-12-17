@@ -36,6 +36,7 @@ class WiFiP2PConnector(
                     Log.d(TAG, "Wi-Fi has been enabled. Starting P2P setup.")
                     // Unregister this receiver as it's no longer needed
                     context.unregisterReceiver(this)
+                    this@WiFiP2PConnector.resetNotification()
                     // Now that Wi-Fi is on, initialize Wi-Fi P2P
                     this@WiFiP2PConnector.context.serviceScope.launch {
                         initializeWifiP2p()
@@ -78,8 +79,7 @@ class WiFiP2PConnector(
             Log.d(TAG, "Wi-Fi is disabled. Registering receiver to listen for state changes.")
             val filter = IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION)
             context.registerReceiver(wifiStateReceiver, filter)
-            notification.setContentText(context.getString(R.string.wifi_not_enabled_waiting))
-            notificationManager.notify(WifiService.NOTIFICATION_ID, notification.build())
+            updateNotification(R.string.wifi_not_enabled_waiting)
         }
     }
 
