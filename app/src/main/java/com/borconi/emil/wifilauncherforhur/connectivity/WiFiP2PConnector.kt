@@ -201,6 +201,13 @@ class WiFiP2PConnector(
         }
     }
 
+    override suspend fun maintainConnectionAlone() {
+        if (wifip2preceiver!=null){
+            wifip2preceiver!!.stop()
+            wifip2preceiver = null
+        }
+    }
+
     companion object {
         private const val TAG = "WiFi-P2P"
     }

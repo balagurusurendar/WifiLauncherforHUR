@@ -125,6 +125,9 @@ open class Connector(
     open fun removeIntentReceivers(){
     }
 
+    open suspend fun maintainConnectionAlone(){
+    }
+
     companion object {
         private const val PACKAGE_NAME_ANDROID_AUTO_WIRELESS =
             "com.google.android.projection.gearhead"

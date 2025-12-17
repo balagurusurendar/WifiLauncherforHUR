@@ -138,6 +138,10 @@ class NDSConnector(
         stopDiscover()
     }
 
+    override suspend fun maintainConnectionAlone() {
+        stop()
+    }
+
     companion object {
         private const val TAG = "NetworkServiceDiscovery"
         const val SERVICE_TYPE: String = "_aawireless._tcp."

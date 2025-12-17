@@ -145,8 +145,7 @@ class WifiService : Service() {
                     connector?.removeIntentReceivers()
                     serviceScope.launch {
                         try {
-                            connector?.stop()
-                            connector = null
+                            connector?.maintainConnectionAlone()
                         }catch (e : Exception){
                             Log.d("WifiService", "Error while stopping connector", e)
                         }
