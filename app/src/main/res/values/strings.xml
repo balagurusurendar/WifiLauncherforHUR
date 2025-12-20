@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Wi-Fi Launcher</string>
     <string name="alert_permission_denied_title">Permissions needed</string>
-    <string name="alert_need_draw_over_other_apps">We need you to allow this app to Display over other apps (necessary to start Android Auto from a background service).\n\nAfter tapping OK you will land in "Display over other apps" settings screen, please look for Wi-Fi Launcher and allow it.</string>
+    <string name="alert_need_draw_over_other_apps">We need you to allow this app to Display over other apps (necessary to start Android Auto from a background service).\n\nAfter tapping OK you will land in \"Display over other apps\" settings screen, please look for Wi-Fi Launcher and allow it.</string>
     <string name="notification_channel_default_name">Service Notifications</string>
     <string name="notification_channel_default_description">Notifications when service is running with no sound/vibration</string>
     <string name="notification_channel_high_name">Turn on Wi-Fi or Location Notifications</string>
@@ -12,7 +12,7 @@
     <string name="settings_bluetooth_selected_bluetooth_devices_forgotten_device">Forgotten device</string>
     <string name="settings_advanced_options_start_service_manually_title">Start Wi-Fi service manually</string>
     <string name="settings_wireless_headunit_wifi_using_router_title">Enable hotspot</string>
-    <string name="settings_wireless_headunit_wifi_using_router_description">Try to automatically turn on the hotspot on the phone so the car\'s unit can join this network.\nWon\'t work on all phones.</string>
+    <string name="settings_wireless_headunit_wifi_using_router_description">Try to automatically turn on the hotspot on the phone so the car\\\'s unit can join this network.\\nWon\\\'t work on all phones.</string>
     <string name="wireless">Wireless</string>
     <string name="bluetooth">Bluetooth</string>
     <string name="status">Status</string>
@@ -25,7 +25,7 @@
     <string name="app_widget_paused">Paused</string>
     <string name="app_widget_running">Running</string>
     <string name="major_title">Major changes!</string>
-    <string name="major_desc">Due to recent limitations added in Android 10 and above, previous methods of wireless connections are not available any longer!\n\nThe new approach will start AA Wireless session when both devices are on the same network, regardless of which device creates the hotspot. \n\nYou need to make sure you update HUR to version 7.0!</string>
+    <string name="major_desc">Due to recent limitations added in Android 10 and above, previous methods of wireless connections are not available any longer!\\n\\nThe new approach will start AA Wireless session when both devices are on the same network, regardless of which device creates the hotspot. \\n\\nYou need to make sure you update HUR to version 7.0!</string>
     <string name="nobt">Nearby permissions must be enable to access Bluetooth functionality</string>
     <string name="System_settings_desc">We need to modify system settings in order to toggle the hotspot on and off when connecting to your cars BT.</string>
     <string name="save">Understood</string>
@@ -33,7 +33,7 @@
     <string name="connectedtocar">Connected to HUR</string>
     <string name="legacy_mode">Legacy Mode</string>
     <string name="legacy_mode_desc">Only use this option, if HUR explicitly says you need too. When this mode is enabled, WiFi Launcher will only work, in client mode, meaning, devire running HUR must create the hotspot.</string>
-    <string name="cant_start">Couldn\'t start the service from background. Is the DRAW OVER OTHER APPS permission enabled?</string>
+    <string name="cant_start">Couldn\\\'t start the service from background. Is the DRAW OVER OTHER APPS permission enabled?</string>
     <string name="disable_optimization">App needs to have battery optimization turned off, to prevent the system for terminating the app mid connection.</string>
     <string name="no_network">No active network, cannot start AA, is mobile data on?</string>
     <string name="auto_reconnect">Try to auto reconnect</string>
@@ -48,8 +48,8 @@
 
     <string name="hur_p2p_name">HUR WiFi Direct name</string>
     <string name="hur_p2p_name_desc">The WiFi Direct name of device running HUR. This will be displayed on HUR home screen if device running HUR supports WiFi P2P.</string>
-    <string name="background_location_needed">Background location needed. Without this, app won\'t be able to access WiFi P2P from the background.</string>
-    <string name="locations_needed">Location is needed for WiFi P2P, without location access WiFi Direct (P2P) won\'t be able to connect to HUR</string>
+    <string name="background_location_needed">Background location needed. Without this, app won\\\'t be able to access WiFi P2P from the background.</string>
+    <string name="locations_needed">Location is needed for WiFi P2P, without location access WiFi Direct (P2P) won\\\'t be able to connect to HUR</string>
     <string name="still_connected_to_wifi">Your phone is still connected to a WiFi network. AA will start when it disconnects</string>
     <string name="select_wifi_mode">Select WiFi connection mode</string>
     <string name="wifi_connection_mode">WiFi connection mode</string>
@@ -57,6 +57,14 @@
     <string name="network_discovery">Network Discovery (both devices should be on same network)</string>
     <string name="use_wifip2p">Use WiFi Direct (also know as WiFi P2P)</string>
     <string name="client_mode">WiFi client mode (car headunit will create hotspot)</string>
-    <string name="tether">Create WiFi hotspot (won\'t work on all devices!)</string>
+    <string name="tether">Create WiFi hotspot (You Need to Make Hotspot Yourself)</string>
+    <string name="wifi_not_enabled_waiting">Wi-Fi is not enabled. Waiting for Wifi to be enabled.</string>
+    <string name="select_wifi_frequency">Select WiFi Frequency</string>
+    <string name="wifi_frequency_desc">Selecting Frequency will scan and use least populated channel</string>
+    <string name="wifi_2ghz">2 Ghz</string>
+    <string name="wifi_5ghz">5 Ghz</string>
+    <string name="wifi_auto">Auto</string>
+    <string name="permission_missing">Permission missing, please grant it in the app</string>
+    <string name="stopping_service">Stopping Service</string>
 
 </resources>

@@ -16,4 +16,15 @@
         <item>5</item>
 >
     </string-array>
+
+    <string-array name="wifi_frequency_value">
+        <item>@string/wifi_auto</item>
+        <item>@string/wifi_2ghz</item>
+        <item>@string/wifi_5ghz</item>
+    </string-array>
+    <string-array name="wifi_frequency_description">
+        <item>0</item>
+        <item>2</item>
+        <item>6</item>
+    </string-array>
 </resources>
