@@ -57,5 +57,5 @@ dependencies {
     implementation("com.linkedin.dexmaker:dexmaker-mockito:2.28.6")
     implementation("com.linkedin.dexmaker:dexmaker:2.28.6")
     implementation("androidx.multidex:multidex:2.0.1")
-    implementation("commons-net:commons-net:3.10.0")
+    implementation("commons-net:commons-net:3.12.0")
 }
